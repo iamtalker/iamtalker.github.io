@@ -1,2 +1,5 @@
-# 자아추론
+---
+layout: default
+---
+
 {% include test.md %}
