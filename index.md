@@ -1,2 +1,2 @@
 # 자아추론
-{% include self-reflection.md %}
+{% include test.md %}
