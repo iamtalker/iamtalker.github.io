@@ -7,6 +7,7 @@ hero:
 
 <ol class="book-shelf">
 <li><a href="/자유로의 초대/">자유로의 초대</a></li>
+<li><a href="/페미니즘 분석/">페미니즘 분석</a></li>
 </ol>
 
 <style>
