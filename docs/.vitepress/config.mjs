@@ -14,28 +14,36 @@ const books = JSON.parse(
   readFileSync(resolve(__dirname, '../../books.json'), 'utf-8')
 )
 
-// VitePress wants one sidebar config per top-level path prefix; since every
-// domain is its own folder under its book's path, map each domain's own
-// items under its own path key so the sidebar changes as you navigate
-// between domains.
+// VitePress wants one sidebar config per top-level path prefix. Each
+// top-level ("chapter") entry is either a container ({text, items}, its
+// own folder with sub-pages) or a leaf ({text, link}, a single page with
+// nothing under it - see build_books.py for when a chapter ends up being
+// a post directly). A container's own path prefix gets its own detailed
+// sidebar (its groups/posts); a leaf has nothing to show but itself, so
+// it just gets the book's whole chapter list instead.
 //
-// Each domain's sidebar also gets a "이전 장 / 다음 장" link above and
+// A container's sidebar also gets a "이전 장 / 다음 장" link above and
 // below its own item group, so you can jump straight to the neighboring
 // chapter from the sidebar without needing to be on its last/first post.
 const sidebar = {}
 for (const [bookSlug, sidebarDomains] of Object.entries(sidebarByBook)) {
   sidebarDomains.forEach((domain, i) => {
-    const items = []
-    if (i > 0) {
-      const prevDomain = sidebarDomains[i - 1]
-      items.push({ text: `← 이전 장: ${prevDomain.text}`, link: `/${bookSlug}/${prevDomain.text}/` })
+    const prevDomain = i > 0 ? sidebarDomains[i - 1] : null
+    const nextDomain = i < sidebarDomains.length - 1 ? sidebarDomains[i + 1] : null
+    const domainLink = (d) => (d.items ? `/${bookSlug}/${d.text}/` : `/${bookSlug}/${d.text}`)
+
+    if (domain.items) {
+      const items = []
+      if (prevDomain) items.push({ text: `← 이전 장: ${prevDomain.text}`, link: domainLink(prevDomain) })
+      items.push(domain)
+      if (nextDomain) items.push({ text: `다음 장: ${nextDomain.text} →`, link: domainLink(nextDomain) })
+      sidebar[`/${bookSlug}/${domain.text}/`] = items
+    } else {
+      // a leaf chapter has no sub-items of its own to show - show the
+      // whole book's chapter list instead, so there's still somewhere to
+      // navigate to from this one page.
+      sidebar[`/${bookSlug}/${domain.text}`] = sidebarDomains
     }
-    items.push(domain)
-    if (i < sidebarDomains.length - 1) {
-      const nextDomain = sidebarDomains[i + 1]
-      items.push({ text: `다음 장: ${nextDomain.text} →`, link: `/${bookSlug}/${nextDomain.text}/` })
-    }
-    sidebar[`/${bookSlug}/${domain.text}/`] = items
   })
 }
 
