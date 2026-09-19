@@ -131,28 +131,76 @@ def extract_anchor_section(raw_text, anchor):
 INCLUDE_RE = re.compile(r"\{\{page>([^}]*)\}\}")
 
 
-def resolve_page_includes(raw_text, seen):
-    # {{page>...}} is a real DokuWiki transclusion - the referenced page's
-    # own text belongs in place of the macro. A hub page (like this
-    # book's "페미니즘 비판" domain) that's itself just a list of further
-    # {{page>...}} references needs those resolved too, recursively;
-    # `seen` (a set of already-expanded file paths) stops an include
-    # cycle from recursing forever.
-    def repl(m):
+def renumber_headers(text, target_shallowest):
+    # DokuWiki numbers a page's headers as if it always started at the
+    # top of a document (its own top header is usually "======", however
+    # deep it ends up embedded elsewhere via {{page>...}}). Once
+    # transcluded under some other header, they need to be pushed deeper
+    # to actually nest under it - DokuWiki's own include plugin does this
+    # shift automatically; this reproduces it. Shifts every header in
+    # `text` by the same delta so its shallowest (largest "=" count)
+    # header becomes exactly `target_shallowest`, preserving the
+    # relative depth of everything else in it. Returns the rewritten
+    # text plus {line_index: new_count} for every header line touched,
+    # so the caller can track the current header context line-by-line.
+    lines = text.split("\n")
+    headers = parse_headers(lines)
+    if not headers:
+        return text, {}
+    # the SHALLOWEST header has the MOST "=" signs (DokuWiki's "======"
+    # is its top level, "==" its deepest) - so the anchor for the shift
+    # is the maximum count present, not the minimum.
+    delta = target_shallowest - max(h[1] for h in headers)
+    new_counts = {}
+    for line_idx, count, htitle in headers:
+        new_count = max(2, min(6, count + delta))
+        new_counts[line_idx] = new_count
+        if new_count != count:
+            eq = "=" * new_count
+            lines[line_idx] = "%s %s %s" % (eq, htitle, eq)
+    return "\n".join(lines), new_counts
+
+
+def expand_includes(raw_text, target_shallowest, seen):
+    # {{page>...}} is a real DokuWiki transclusion - the referenced
+    # page's own text belongs in place of the macro, renumbered (see
+    # renumber_headers) to land one level under whatever header it was
+    # found beneath, and resolved recursively (a hub page like this
+    # book's "페미니즘 비판" domain is itself just a list of further
+    # {{page>...}} references). `seen` (already-expanded file paths)
+    # stops an include cycle from recursing forever.
+    text, new_counts = renumber_headers(raw_text, target_shallowest)
+    lines = text.split("\n")
+    cur_ctx = target_shallowest
+    out = []
+    for i, line in enumerate(lines):
+        if i in new_counts:
+            cur_ctx = new_counts[i]
+            out.append(line)
+            continue
+        m = INCLUDE_RE.fullmatch(line.strip())
+        if not m:
+            out.append(line)
+            continue
         path, anchor = resolve_ref_path(m.group(1))
         if path is None or not os.path.exists(path) or path in seen:
-            return ""
+            continue
         inner = open(path, encoding="utf-8").read()
         if anchor:
             section = extract_anchor_section(inner, anchor)
             if section is not None:
                 inner = section
-        return resolve_page_includes(inner, seen | {path})
-    return INCLUDE_RE.sub(repl, raw_text)
+        out.append(expand_includes(inner, cur_ctx - 1, seen | {path}))
+    return "\n".join(out)
 
 
-def convert_dokuwiki(raw_text, title=None, seen=frozenset()):
-    raw_text = resolve_page_includes(raw_text, seen)
+def convert_dokuwiki(raw_text, title=None, ctx_count=6, seen=frozenset()):
+    # ctx_count is the "=" count of the header (in the book file, or a
+    # header this content was itself transcluded under) that this body
+    # belongs to - its own headers get renumbered to sit one level under
+    # it. Plain inline text (no ctx_count meaning, e.g. a book file's
+    # hand-written paragraph) has no headers to renumber anyway.
+    raw_text = expand_includes(raw_text, ctx_count - 1, seen)
     # pandoc's dokuwiki reader treats any {{...}} as a media/image
     # reference (core DokuWiki {{image.png}} syntax) - it doesn't know
     # about plugin macros like {{tag>...}}, so those turn into a broken
@@ -164,18 +212,7 @@ def convert_dokuwiki(raw_text, title=None, seen=frozenset()):
     # images by mistake.
     raw_text = re.sub(r"\{\{\w+>[^}]*\}\}", "", raw_text)
     result = subprocess.run(
-        # shift every heading down one level (dokuwiki's h1 "======" lands
-        # as markdown h2, etc.) so the post's own "# title" line - written
-        # separately, not by pandoc - stays the page's only h1. Without
-        # this, a hub page's real content headings (e.g. the "======
-        # 메갈리아 ======" inside "페미니즘 비판") come out as MORE h1s,
-        # which both reads oddly and made them invisible in VitePress's
-        # in-page outline panel (it lists h2+ by design, to not repeat the
-        # title). Shifting is also what makes a nested reference's real
-        # heading depth ({{page>...}} pulled in two levels deep, say)
-        # actually distinguishable from the top-level ones instead of
-        # everything flattening to h1.
-        [PANDOC, "-f", "dokuwiki", "-t", "gfm", "--shift-heading-level-by=1"],
+        [PANDOC, "-f", "dokuwiki", "-t", "gfm"],
         input=raw_text, capture_output=True, encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
@@ -287,10 +324,12 @@ def build_heading_sidebar(md, base_link):
     return drop_empty(items)
 
 
-def get_leaf_markdown(ref, inline_body, title):
+def get_leaf_markdown(ref, inline_body, title, ctx_count):
     """Returns markdown text for a leaf post, or raises FileNotFoundError /
     RuntimeError with a message explaining why (caller reports it as
-    missing content, keeps going)."""
+    missing content, keeps going). ctx_count is the "=" count of the
+    header (in the book file) that defines this leaf - the referenced
+    content's own headers get renumbered to sit one level under it."""
     if ref:
         path, anchor = resolve_ref_path(ref)
         if path is None or not os.path.exists(path):
@@ -300,7 +339,7 @@ def get_leaf_markdown(ref, inline_body, title):
             section = extract_anchor_section(raw, anchor)
             if section is not None:
                 raw = section
-        return convert_dokuwiki(raw, title=title, seen=frozenset({path}))
+        return convert_dokuwiki(raw, title=title, ctx_count=ctx_count, seen=frozenset({path}))
     else:
         return convert_dokuwiki("\n".join(inline_body), title=title)
 
@@ -441,7 +480,7 @@ def build_one_book(book_slug, docs_txt):
             # domain is itself a post
             file_path = os.path.join(OUT_DOCS, book_slug, d_slug + ".md")
             try:
-                md = get_leaf_markdown(own_ref, own_body, d_title)
+                md = get_leaf_markdown(own_ref, own_body, d_title, d_count)
             except Exception as e:
                 missing.append("%s: %s" % (d_title, e))
                 continue
@@ -479,7 +518,7 @@ def build_one_book(book_slug, docs_txt):
                 # this "theme" heading is itself a post, no posts under it
                 file_path = os.path.join(domain_dir, g_slug + ".md")
                 try:
-                    md = get_leaf_markdown(g_own_ref, g_own_body, g_title)
+                    md = get_leaf_markdown(g_own_ref, g_own_body, g_title, g_count)
                 except Exception as e:
                     missing.append("%s / %s: %s" % (d_title, g_title, e))
                     continue
@@ -503,7 +542,7 @@ def build_one_book(book_slug, docs_txt):
                     continue
                 file_path = os.path.join(domain_dir, p_slug + ".md")
                 try:
-                    md = get_leaf_markdown(p_ref, p_body, p_title)
+                    md = get_leaf_markdown(p_ref, p_body, p_title, p_count)
                 except Exception as e:
                     missing.append("%s / %s / %s: %s" % (d_title, g_title, p_title, e))
                     continue
