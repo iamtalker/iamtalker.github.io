@@ -47,6 +47,7 @@ PUBLIC_DIR = os.path.join(REPO_ROOT, "docs", "public")
 
 HEADER_RE = re.compile(r"^(={2,6})(?!=)\s*(.+?)\s*\1(?!=)\s*$")
 REF_RE = re.compile(r"page>([^&\n}]+)(&[^\n}]*)?")
+MARKDOWN_BLOCK_RE = re.compile(r"<markdown>(.*?)</markdown>", re.IGNORECASE | re.DOTALL)
 
 
 def clean_id(raw):
@@ -203,6 +204,18 @@ def convert_dokuwiki(raw_text, title=None, ctx_count=6, seen=frozenset()):
     # it. Plain inline text (no ctx_count meaning, e.g. a book file's
     # hand-written paragraph) has no headers to renumber anyway.
     raw_text = expand_includes(raw_text, ctx_count - 1, seen)
+    # <markdown>...</markdown> (a DokuWiki plugin, not core syntax) lets
+    # this user drop real markdown straight into a page - pandoc's
+    # dokuwiki reader has no idea what the tag is, so it escapes
+    # everything inside it (a literal, dead "<markdown>![](url)
+    # </markdown>" shows up on the page). Pull each block's content out
+    # before conversion and splice it back in verbatim afterward - it's
+    # already valid markdown, nothing to convert.
+    markdown_blocks = []
+    def stash_markdown_block(m):
+        markdown_blocks.append(m.group(1).strip())
+        return "\n\nZZMARKDOWNBLOCK%dZZ\n\n" % (len(markdown_blocks) - 1)
+    raw_text = MARKDOWN_BLOCK_RE.sub(stash_markdown_block, raw_text)
     # pandoc's dokuwiki reader treats any {{...}} as a media/image
     # reference (core DokuWiki {{image.png}} syntax) - it doesn't know
     # about plugin macros like {{tag>...}}, so those turn into a broken
@@ -220,6 +233,8 @@ def convert_dokuwiki(raw_text, title=None, ctx_count=6, seen=frozenset()):
     if result.returncode != 0:
         raise RuntimeError("pandoc failed: %s" % result.stderr)
     md = result.stdout
+    for i, block in enumerate(markdown_blocks):
+        md = md.replace("ZZMARKDOWNBLOCK%dZZ" % i, block)
     # a leading heading is only stripped when it's a duplicate of the post
     # title already shown above the content (the usual case for this
     # user's wordblock articles, which are self-titled and included with
