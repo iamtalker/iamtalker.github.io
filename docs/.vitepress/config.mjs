@@ -14,18 +14,23 @@ const books = JSON.parse(
   readFileSync(resolve(__dirname, '../../books.json'), 'utf-8')
 )
 
-// VitePress wants one sidebar config per top-level path prefix. Each
-// top-level ("chapter") entry is either a container ({text, items}, its
-// own folder with sub-pages) or a leaf ({text, link}, a single page with
-// nothing under it - see build_books.py for when a chapter ends up being
-// a post directly). A container's own path prefix gets its own detailed
-// sidebar (its groups/posts); a leaf has nothing to show but itself, so
-// it just gets the book's whole chapter list instead.
-//
-// A container's sidebar also gets a "이전 장 / 다음 장" link above and
-// below its own item group, so you can jump straight to the neighboring
-// chapter from the sidebar without needing to be on its last/first post.
-const sidebar = {}
+// VitePress wants one sidebar config per top-level path prefix. Every
+// top-level ("chapter") entry - container ({text, items}, its own
+// folder with sub-pages) or leaf ({text, link}, a single page, maybe
+// with its own heading sub-tree) alike - gets the SAME focused sidebar:
+// itself plus "이전 장 / 다음 장" links to its neighbors, not the whole
+// book's flat chapter list. (Leaves used to get the whole list, back
+// when a leaf had nothing of its own to show; now that a leaf can carry
+// its own heading sub-tree, that list stopped being just a static
+// index - VitePress keeps its sidebar item components alive across
+// client-side navigation, so their "expanded" state persists with
+// them, and since every leaf route pointed at the exact same list of
+// domain objects, expanding one leaf's tree left it stuck open on
+// every OTHER leaf's page too, compounding the more pages you visited.
+// A focused per-domain list, matching what containers already did,
+// sidesteps this entirely - and makes every chapter behave the same
+// way, container or leaf.)
+const sidebarEntries = []
 for (const [bookSlug, sidebarDomains] of Object.entries(sidebarByBook)) {
   sidebarDomains.forEach((domain, i) => {
     const prevDomain = i > 0 ? sidebarDomains[i - 1] : null
@@ -37,20 +42,28 @@ for (const [bookSlug, sidebarDomains] of Object.entries(sidebarByBook)) {
     // the two apart now, not "items".
     const domainLink = (d) => d.link || `/${bookSlug}/${d.text}/`
 
-    if (!domain.link) {
-      const items = []
-      if (prevDomain) items.push({ text: `← 이전 장: ${prevDomain.text}`, link: domainLink(prevDomain) })
-      items.push(domain)
-      if (nextDomain) items.push({ text: `다음 장: ${nextDomain.text} →`, link: domainLink(nextDomain) })
-      sidebar[`/${bookSlug}/${domain.text}/`] = items
-    } else {
-      // a leaf chapter's own page has nothing above it to show - show
-      // the whole book's chapter list instead (itself included, now
-      // possibly with its own heading sub-items expanded inline), so
-      // there's still somewhere to navigate to from this one page.
-      sidebar[`/${bookSlug}/${domain.text}`] = sidebarDomains
-    }
+    const items = []
+    if (prevDomain) items.push({ text: `← 이전 장: ${prevDomain.text}`, link: domainLink(prevDomain) })
+    items.push(domain)
+    if (nextDomain) items.push({ text: `다음 장: ${nextDomain.text} →`, link: domainLink(nextDomain) })
+    const key = domain.link ? `/${bookSlug}/${domain.text}` : `/${bookSlug}/${domain.text}/`
+    sidebarEntries.push([key, items])
   })
+}
+// VitePress resolves a route's sidebar by finding the first registered
+// key (among those tied for the most "/"-separated segments) that the
+// route STARTS WITH - a plain string prefix check with no path-segment
+// boundary awareness. Two sibling leaves whose names happen to share a
+// prefix (e.g. "여성혐오" and "여성혐오_주장과_그에_대한_반론" both live
+// directly under the book, so both keys have the same segment count)
+// tie, and ties fall back to insertion order - so "여성혐오"'s key,
+// inserted first, was silently swallowing "여성혐오_주장과..."'s route
+// too, showing the wrong domain's sidebar entirely. Inserting longer
+// keys first guarantees a more specific key is always found before a
+// shorter one that happens to be its textual prefix.
+const sidebar = {}
+for (const [key, items] of sidebarEntries.sort((a, b) => b[0].length - a[0].length)) {
+  sidebar[key] = items
 }
 
 export default defineConfig({
