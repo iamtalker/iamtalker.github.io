@@ -125,14 +125,38 @@ def extract_anchor_section(raw_text, anchor):
     return None  # anchor not found - caller falls back to the whole page
 
 
-def convert_dokuwiki(raw_text):
+INCLUDE_RE = re.compile(r"\{\{page>([^}]*)\}\}")
+
+
+def resolve_page_includes(raw_text, seen):
+    # {{page>...}} is a real DokuWiki transclusion - the referenced page's
+    # own text belongs in place of the macro. A hub page (like this
+    # book's "페미니즘 비판" domain) that's itself just a list of further
+    # {{page>...}} references needs those resolved too, recursively;
+    # `seen` (a set of already-expanded file paths) stops an include
+    # cycle from recursing forever.
+    def repl(m):
+        path, anchor = resolve_ref_path(m.group(1))
+        if path is None or not os.path.exists(path) or path in seen:
+            return ""
+        inner = open(path, encoding="utf-8").read()
+        if anchor:
+            section = extract_anchor_section(inner, anchor)
+            if section is not None:
+                inner = section
+        return resolve_page_includes(inner, seen | {path})
+    return INCLUDE_RE.sub(repl, raw_text)
+
+
+def convert_dokuwiki(raw_text, seen=frozenset()):
+    raw_text = resolve_page_includes(raw_text, seen)
     # pandoc's dokuwiki reader treats any {{...}} as a media/image
     # reference (core DokuWiki {{image.png}} syntax) - it doesn't know
-    # about plugin macros like {{tag>...}} or a nested {{page>...}}
-    # inside a page's own body, so those turn into a broken image link
-    # (e.g. ![](page>여성범죄)) that VitePress then tries to resolve as a
-    # file import and fails the build. Strip any "{{word>...}}" plugin
-    # macro before conversion - genuine image syntax is always
+    # about plugin macros like {{tag>...}}, so those turn into a broken
+    # image link (e.g. ![](tag>foo)) that VitePress then tries to
+    # resolve as a file import and fails the build. Strip any remaining
+    # "{{word>...}}" plugin macro before conversion (page> includes are
+    # already resolved above) - genuine image syntax is always
     # "{{namespace:file.ext}}" (colons, no ">"), so this can't eat real
     # images by mistake.
     raw_text = re.sub(r"\{\{\w+>[^}]*\}\}", "", raw_text)
@@ -162,7 +186,7 @@ def get_leaf_markdown(ref, inline_body):
             section = extract_anchor_section(raw, anchor)
             if section is not None:
                 raw = section
-        return convert_dokuwiki(raw)
+        return convert_dokuwiki(raw, seen=frozenset({path}))
     else:
         return convert_dokuwiki("\n".join(inline_body))
 

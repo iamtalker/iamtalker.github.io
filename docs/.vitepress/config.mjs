@@ -53,6 +53,11 @@ export default defineConfig({
   lang: 'ko-KR',
   base: '/',
   cleanUrls: true,
+  // included pages can carry DokuWiki [[internal links]] to pages that
+  // aren't part of this site (they're just other wiki pages, not book
+  // content) - pandoc turns those into relative links VitePress can't
+  // resolve, which would otherwise fail the build.
+  ignoreDeadLinks: true,
   themeConfig: {
     nav: books.map((b) => ({ text: b.slug, link: `/${b.slug}/` })),
     sidebar,
