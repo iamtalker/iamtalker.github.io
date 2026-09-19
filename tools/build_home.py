@@ -16,12 +16,12 @@ layout: home
 hero:
   name: "iamtalker"
   text: "존재에서 세계까지"
-  tagline: 개인 철학 전집 — 내면에서 외면으로
-features:
-%s
+  tagline: 개인 철학 에세이 — 내면에서 외면으로
 ---
+
+%s
 """ % "\n".join(
-    "  - title: %s\n    link: /%s/" % (d["text"], d["text"]) for d in sidebar
+    "%d. [%s](/%s/)" % (i, d["text"], d["text"]) for i, d in enumerate(sidebar, 1)
 )
 
 with open(INDEX_MD, "w", encoding="utf-8", newline="\n") as f:
