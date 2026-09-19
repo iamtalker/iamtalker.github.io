@@ -1,10 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-python tools\build_site.py docs
-if errorlevel 1 goto :error
-
-python tools\build_book_index.py
+python tools\run_all_books.py docs
 if errorlevel 1 goto :error
 
 python tools\build_library.py
