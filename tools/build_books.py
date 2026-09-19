@@ -35,6 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 
 PAGES_DIR = r"C:\MyData\DokuWikiStick\dokuwiki\data\pages"
 BOOKS_SRC_DIR = os.path.join(PAGES_DIR, "github_io_books")
@@ -203,6 +204,89 @@ def normalize_heading(s):
     return re.sub(r"[^\w가-힣]", "", s, flags=re.UNICODE)
 
 
+MD_HEADING_RE = re.compile(r"^(#{2,6})[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+
+
+# characters markdown-it-anchor (VitePress's slugifier) treats as word
+# separators - collapsed into a single "-" wherever one or more appear,
+# confirmed against the real built HTML (this is why a DokuWiki header
+# written with underscores, "귀납법적_착시로_...", or a colon, "번역:
+# 여성혐오", lands as hyphens in the real id, not deleted or left as-is).
+SLUG_SEPARATOR_RE = re.compile(
+    r"[\s~`!@#$%^&*()\-_+=\[\]{}|\\;:\"'<>,.?/…]+"
+)
+# curly/smart quotes are dropped outright (no hyphen left behind) -
+# confirmed against a real news-headline-style heading ("최고"...OECD)
+# where the quote around "최고" vanishes but the "..." after it becomes
+# a hyphen (handled by … above).
+SLUG_DROP_RE = re.compile(r"[‘’“”]")
+
+
+def vitepress_slug(text, seen):
+    # approximates the id markdown-it-anchor (what VitePress's own
+    # in-page outline links against) assigns a heading - not guaranteed
+    # byte-perfect for every possible heading text (same caveat as this
+    # tool's other approximate slug function, dokuwiki_anchor_slug), but
+    # matches the ordinary cases seen in this corpus (verified against
+    # every generated sidebar link's target actually existing in the
+    # built HTML). Verify the same way if a new book's links don't jump
+    # correctly.
+    s = text.strip().lower()
+    s = SLUG_DROP_RE.sub("", s)
+    s = SLUG_SEPARATOR_RE.sub("-", s).strip("-")
+    s = re.sub(r"-+", "-", s) or "section"
+    if s[0].isdigit():
+        # a bare-numeric-leading id isn't valid HTML4, so the slugifier
+        # VitePress uses prefixes it with "_" (e.g. "2006-2011..." ->
+        # "_2006-2011...") - confirmed against the actual built HTML.
+        s = "_" + s
+    # VitePress's real heading ids are Unicode NFD (decomposed Hangul
+    # jamo, not the precomposed syllables our source text uses) - some
+    # slugify step in its toolchain normalizes this way. Without this,
+    # every Korean sidebar anchor link would silently fail to scroll to
+    # its heading despite looking identical on screen. Confirmed against
+    # the actual built HTML's id attributes.
+    s = unicodedata.normalize("NFD", s)
+    n = seen.get(s, 0)
+    seen[s] = n + 1
+    return s if n == 0 else "%s-%d" % (s, n)
+
+
+def sidebar_leaf_entry(title, link, md):
+    sub_items = build_heading_sidebar(md, link)
+    if sub_items:
+        return {"text": title, "link": link, "collapsed": True, "items": sub_items}
+    return {"text": title, "link": link}
+
+
+def build_heading_sidebar(md, base_link):
+    # Mirrors the page's own in-page outline (VitePress's right-side "이
+    # 글의 목차") as a left-sidebar tree of same-page anchor links, so a
+    # domain's real internal structure (however deep - this is what
+    # {{page>...}} pulls in, not something this book file's own headers
+    # controlled) is visible without opening the page first.
+    seen = {}
+    items = []
+    stack = [(1, items)]  # sentinel below h2, the shallowest heading level kept
+    for m in MD_HEADING_RE.finditer(md):
+        level = len(m.group(1))
+        text = m.group(2).strip()
+        slug = vitepress_slug(text, seen)
+        while len(stack) > 1 and stack[-1][0] >= level:
+            stack.pop()
+        node = {"text": text, "link": "%s#%s" % (base_link, slug), "items": []}
+        stack[-1][1].append(node)
+        stack.append((level, node["items"]))
+    def drop_empty(nodes):
+        for n in nodes:
+            if n["items"]:
+                drop_empty(n["items"])
+            else:
+                del n["items"]
+        return nodes
+    return drop_empty(items)
+
+
 def get_leaf_markdown(ref, inline_body, title):
     """Returns markdown text for a leaf post, or raises FileNotFoundError /
     RuntimeError with a message explaining why (caller reports it as
@@ -259,9 +343,12 @@ def write_container_index(out_dir, title, items, prev_sibling, next_sibling, cha
 
 
 def write_book_index(out_docs, book_slug, sidebar):
-    lines = ['<li><a href="/%s/%s/">%s</a></li>' % (book_slug, d["text"], d["text"])
-             if "items" in d else
-             '<li><a href="/%s/%s">%s</a></li>' % (book_slug, d["text"], d["text"])
+    # a leaf domain always has "link" (its one page), whether or not it
+    # also carries "items" for its own internal heading sub-tree now -
+    # only a true container domain (own folder, no single page) lacks it.
+    lines = ['<li><a href="/%s/%s">%s</a></li>' % (book_slug, d["text"], d["text"])
+             if "link" in d else
+             '<li><a href="/%s/%s/">%s</a></li>' % (book_slug, d["text"], d["text"])
              for d in sidebar]
     home = """---
 layout: home
@@ -362,7 +449,7 @@ def build_one_book(book_slug, docs_txt):
             with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                 f.write("# %s\n\n%s\n" % (d_title, md))
             link = domain_link_leaf(d_slug)
-            sidebar_items.append({"text": d_title, "link": link})
+            sidebar_items.append(sidebar_leaf_entry(d_title, link, md))
             flat_posts.append({"file_path": file_path, "title": d_title, "link": link, "chapter_title": d_title})
             domain_entries.append((d_title, "leaf", link))
             continue
@@ -400,7 +487,7 @@ def build_one_book(book_slug, docs_txt):
                 with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                     f.write("# %s\n\n%s\n" % (g_title, md))
                 link = "/%s/%s/%s" % (book_slug, d_slug, g_slug)
-                group_items.append({"text": g_title, "link": link})
+                group_items.append(sidebar_leaf_entry(g_title, link, md))
                 flat_posts.append({"file_path": file_path, "title": g_title, "link": link, "chapter_title": d_title})
                 continue
 
@@ -424,7 +511,7 @@ def build_one_book(book_slug, docs_txt):
                 with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                     f.write("# %s\n\n%s\n" % (p_title, md))
                 link = "/%s/%s/%s" % (book_slug, d_slug, p_slug)
-                post_items.append({"text": p_title, "link": link})
+                post_items.append(sidebar_leaf_entry(p_title, link, md))
                 flat_posts.append({"file_path": file_path, "title": p_title, "link": link, "chapter_title": d_title})
 
             if post_items:

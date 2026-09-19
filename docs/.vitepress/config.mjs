@@ -30,18 +30,24 @@ for (const [bookSlug, sidebarDomains] of Object.entries(sidebarByBook)) {
   sidebarDomains.forEach((domain, i) => {
     const prevDomain = i > 0 ? sidebarDomains[i - 1] : null
     const nextDomain = i < sidebarDomains.length - 1 ? sidebarDomains[i + 1] : null
-    const domainLink = (d) => (d.items ? `/${bookSlug}/${d.text}/` : `/${bookSlug}/${d.text}`)
+    // a leaf domain always carries its own real "link" (its one page's
+    // URL) whether or not it also has "items" for its own internal
+    // heading sub-tree; only a container domain (own folder, no single
+    // page of its own) lacks "link" entirely - so "link" is what tells
+    // the two apart now, not "items".
+    const domainLink = (d) => d.link || `/${bookSlug}/${d.text}/`
 
-    if (domain.items) {
+    if (!domain.link) {
       const items = []
       if (prevDomain) items.push({ text: `← 이전 장: ${prevDomain.text}`, link: domainLink(prevDomain) })
       items.push(domain)
       if (nextDomain) items.push({ text: `다음 장: ${nextDomain.text} →`, link: domainLink(nextDomain) })
       sidebar[`/${bookSlug}/${domain.text}/`] = items
     } else {
-      // a leaf chapter has no sub-items of its own to show - show the
-      // whole book's chapter list instead, so there's still somewhere to
-      // navigate to from this one page.
+      // a leaf chapter's own page has nothing above it to show - show
+      // the whole book's chapter list instead (itself included, now
+      // possibly with its own heading sub-items expanded inline), so
+      // there's still somewhere to navigate to from this one page.
       sidebar[`/${bookSlug}/${domain.text}`] = sidebarDomains
     }
   })
