@@ -62,7 +62,11 @@ export default defineConfig({
     nav: books.map((b) => ({ text: b.slug, link: `/${b.slug}/` })),
     sidebar,
     search: { provider: 'local' },
-    outline: { label: '이 글의 목차' },
+    // 'deep' = h2 through h6. Needed now that heading levels are
+    // consistently shifted (see build_books.py's --shift-heading-level-by)
+    // so a hub page's real sub-topics actually show up in the outline
+    // instead of only the first level or two.
+    outline: { level: 'deep', label: '이 글의 목차' },
     docFooter: { prev: '이전 글', next: '다음 글' },
     returnToTopLabel: '맨 위로',
   },

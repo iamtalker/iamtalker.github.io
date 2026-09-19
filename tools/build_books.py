@@ -100,6 +100,7 @@ def has_content(body_lines):
 
 def resolve_ref_path(raw_ref):
     ref = raw_ref.strip()
+    ref = ref.split("&", 1)[0]  # strip include-plugin flags (&noheader, &noindent, ...)
     anchor = None
     if "#" in ref:
         ref, anchor = ref.split("#", 1)
@@ -149,7 +150,7 @@ def resolve_page_includes(raw_text, seen):
     return INCLUDE_RE.sub(repl, raw_text)
 
 
-def convert_dokuwiki(raw_text, seen=frozenset()):
+def convert_dokuwiki(raw_text, title=None, seen=frozenset()):
     raw_text = resolve_page_includes(raw_text, seen)
     # pandoc's dokuwiki reader treats any {{...}} as a media/image
     # reference (core DokuWiki {{image.png}} syntax) - it doesn't know
@@ -162,19 +163,47 @@ def convert_dokuwiki(raw_text, seen=frozenset()):
     # images by mistake.
     raw_text = re.sub(r"\{\{\w+>[^}]*\}\}", "", raw_text)
     result = subprocess.run(
-        [PANDOC, "-f", "dokuwiki", "-t", "gfm"],
+        # shift every heading down one level (dokuwiki's h1 "======" lands
+        # as markdown h2, etc.) so the post's own "# title" line - written
+        # separately, not by pandoc - stays the page's only h1. Without
+        # this, a hub page's real content headings (e.g. the "======
+        # 메갈리아 ======" inside "페미니즘 비판") come out as MORE h1s,
+        # which both reads oddly and made them invisible in VitePress's
+        # in-page outline panel (it lists h2+ by design, to not repeat the
+        # title). Shifting is also what makes a nested reference's real
+        # heading depth ({{page>...}} pulled in two levels deep, say)
+        # actually distinguishable from the top-level ones instead of
+        # everything flattening to h1.
+        [PANDOC, "-f", "dokuwiki", "-t", "gfm", "--shift-heading-level-by=1"],
         input=raw_text, capture_output=True, encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
         raise RuntimeError("pandoc failed: %s" % result.stderr)
     md = result.stdout
-    # a leading H1 (from the source's own ====== header, if any) is
-    # redundant with the post title VitePress already shows
-    md = re.sub(r"^#\s+.+\n+", "", md, count=1)
+    # a leading heading is only stripped when it's a duplicate of the post
+    # title already shown above the content (the usual case for this
+    # user's wordblock articles, which are self-titled and included with
+    # &noheader specifically to avoid this duplication - our pandoc-based
+    # pipeline doesn't act on that flag, so it approximates it here). Old
+    # freeform wiki hub pages often start with a real, DIFFERENT heading
+    # (e.g. a page titled "여성혐오" whose own first header is "메갈의
+    # 여성혐오") - stripping unconditionally silently deleted that heading.
+    # The match is punctuation/whitespace-insensitive because the same
+    # title is sometimes typed slightly differently between the outer
+    # book file and the article's own header (a trailing period, spacing
+    # around a dash, etc.) - see normalize_heading().
+    m = re.match(r"^#+\s+(.+?)\s*\n+", md)
+    if m and title and normalize_heading(m.group(1)) == normalize_heading(title):
+        md = md[m.end():]
     return md.strip()
 
 
-def get_leaf_markdown(ref, inline_body):
+def normalize_heading(s):
+    s = s.strip().lower()
+    return re.sub(r"[^\w가-힣]", "", s, flags=re.UNICODE)
+
+
+def get_leaf_markdown(ref, inline_body, title):
     """Returns markdown text for a leaf post, or raises FileNotFoundError /
     RuntimeError with a message explaining why (caller reports it as
     missing content, keeps going)."""
@@ -187,9 +216,9 @@ def get_leaf_markdown(ref, inline_body):
             section = extract_anchor_section(raw, anchor)
             if section is not None:
                 raw = section
-        return convert_dokuwiki(raw, seen=frozenset({path}))
+        return convert_dokuwiki(raw, title=title, seen=frozenset({path}))
     else:
-        return convert_dokuwiki("\n".join(inline_body))
+        return convert_dokuwiki("\n".join(inline_body), title=title)
 
 
 def write_container_index(out_dir, title, items, prev_sibling, next_sibling, chapter_labels):
@@ -325,7 +354,7 @@ def build_one_book(book_slug, docs_txt):
             # domain is itself a post
             file_path = os.path.join(OUT_DOCS, book_slug, d_slug + ".md")
             try:
-                md = get_leaf_markdown(own_ref, own_body)
+                md = get_leaf_markdown(own_ref, own_body, d_title)
             except Exception as e:
                 missing.append("%s: %s" % (d_title, e))
                 continue
@@ -363,7 +392,7 @@ def build_one_book(book_slug, docs_txt):
                 # this "theme" heading is itself a post, no posts under it
                 file_path = os.path.join(domain_dir, g_slug + ".md")
                 try:
-                    md = get_leaf_markdown(g_own_ref, g_own_body)
+                    md = get_leaf_markdown(g_own_ref, g_own_body, g_title)
                 except Exception as e:
                     missing.append("%s / %s: %s" % (d_title, g_title, e))
                     continue
@@ -387,7 +416,7 @@ def build_one_book(book_slug, docs_txt):
                     continue
                 file_path = os.path.join(domain_dir, p_slug + ".md")
                 try:
-                    md = get_leaf_markdown(p_ref, p_body)
+                    md = get_leaf_markdown(p_ref, p_body, p_title)
                 except Exception as e:
                     missing.append("%s / %s / %s: %s" % (d_title, g_title, p_title, e))
                     continue
