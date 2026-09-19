@@ -139,7 +139,7 @@ def main():
 
     for domain in domains:
         domain_slug = slugify_path(domain["title"])
-        domain_dir = os.path.join(OUT_DOCS, domain_slug)
+        domain_dir = os.path.join(OUT_DOCS, BOOK_SLUG, domain_slug)
         os.makedirs(domain_dir, exist_ok=True)
         sidebar_domain = {"text": domain["title"], "items": []}
 
@@ -159,7 +159,7 @@ def main():
                 file_path = os.path.join(domain_dir, post_slug + ".md")
                 with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                     f.write("# %s\n\n%s\n" % (post["title"], body))
-                link = "/%s/%s" % (domain_slug, post_slug)
+                link = "/%s/%s/%s" % (BOOK_SLUG, domain_slug, post_slug)
                 group_items.append({"text": post["title"], "link": link})
 
             if group["title"] is None:

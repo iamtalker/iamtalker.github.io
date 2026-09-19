@@ -4,7 +4,10 @@ cd /d "%~dp0"
 python tools\build_site.py docs
 if errorlevel 1 goto :error
 
-python tools\build_home.py
+python tools\build_book_index.py
+if errorlevel 1 goto :error
+
+python tools\build_library.py
 if errorlevel 1 goto :error
 
 git add -A
