@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 """
-Builds this one book ("자유로의 초대") from iamtalker_docs.txt + wordblock/*.txt
-into the shared docs/ tree. Every book gets its own folder under
-tools/books/<slug>/ with its own build.py like this one, since each book's
-source format can be completely different - this one happens to be a
-DokuWiki collection, but a future book might come from plain Markdown
-files, a different wiki, etc. tools/run_all_books.py (driven by
-books.json) is what invokes each book's build.py in turn, so adding a book
-never means writing a new update.bat - only a new build.py plus one entry
-in books.json.
+Builds every book found in pages/github_io_books/*.txt into the shared
+docs/ tree. Adding a new book means dropping a new DokuWiki-syntax file
+into that folder - nothing else. No new script, no editing this file, no
+registry to update by hand.
 
-Reads the DokuWiki master TOC (L1 ====== domain, L2 ===== theme, L3 ====
-post title, followed by a {{page>wordblock:ID}} / page>wordblock:ID
-reference), resolves each reference against wordblock/<id>.txt, converts
-that file's DokuWiki markup to Markdown via pandoc, and writes one .md
-file per post, an index.md per domain, this book's own home page, and a
-VitePress sidebar config that mirrors the L1/L2/L3 nesting.
+Each book file uses the exact same syntax as the original iamtalker_docs.txt
+(L1 ====== domain, L2 ===== theme, L3 ==== post title, followed by a
+{{page>wordblock:ID}} / page>wordblock:ID reference resolved against
+wordblock/<id>.txt). The book's title/slug is its filename with .txt
+stripped and underscores turned back into spaces (matching how every
+other filename in this pipeline already maps spaces <-> underscores).
+
+Writes: one .md file per post, an index.md per domain (with prev/next
+chapter links), each book's own home page, books.json (the site-root
+library's reading list) and sidebar.json (now keyed per book, since
+config.mjs needs to build a separate sidebar scope for each book).
 """
+import glob
 import json
 import os
 import re
@@ -24,13 +25,11 @@ import subprocess
 import sys
 
 PAGES_DIR = r"C:\MyData\DokuWikiStick\dokuwiki\data\pages"
+BOOKS_SRC_DIR = os.path.join(PAGES_DIR, "github_io_books")
 WORDBLOCK_DIR = os.path.join(PAGES_DIR, "wordblock")
-DOCS_TXT = os.path.join(PAGES_DIR, "iamtalker_docs.txt")
 OUT_DOCS = sys.argv[1] if len(sys.argv) > 1 else r"docs"
 PANDOC = r"C:\Users\misti\AppData\Local\Pandoc\pandoc.exe"
-
-BOOK_SLUG = "자유로의 초대"
-BOOK_TAGLINE = "개인 철학 에세이 — 내면에서 외면으로"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def clean_id(raw):
@@ -83,12 +82,6 @@ def write_domain_index(domain_dir, sidebar_domain, prev_domain, next_domain):
     # on the page instead of a clickable link (same issue the home page
     # hit). Raw HTML <a> tags inside the list items render correctly.
     lines = []
-    # VitePress's own auto prev/next (derived from the active sidebar) only
-    # works for pages that are themselves listed as a "link" item in that
-    # sidebar - a domain's own index.md isn't (only its posts are), so it
-    # was showing an inconsistent prev/next (e.g. only "이전 장", no "다음
-    # 장"). Set both explicitly here, same as the flat_posts loop below
-    # does for posts.
     frontmatter = {}
     if prev_domain:
         frontmatter["prev"] = {"text": "이전 장: %s" % prev_domain[0], "link": prev_domain[1]}
@@ -102,7 +95,6 @@ def write_domain_index(domain_dir, sidebar_domain, prev_domain, next_domain):
             lines.append("  text: %s" % json.dumps(frontmatter[key]["text"], ensure_ascii=False))
             lines.append("  link: %s" % json.dumps(frontmatter[key]["link"], ensure_ascii=False))
     lines.append("---\n")
-
     lines.append("# %s\n" % sidebar_domain["text"])
 
     def walk(items):
@@ -118,15 +110,12 @@ def write_domain_index(domain_dir, sidebar_domain, prev_domain, next_domain):
         f.write("\n".join(lines) + "\n")
 
 
-def write_book_index(out_docs, sidebar):
-    # This book's own home page (hero + domain list), same raw-HTML-link
-    # fix as write_domain_index (see build bugs in memory/README).
-    lines = ['<li><a href="/%s/%s/">%s</a></li>' % (BOOK_SLUG, d["text"], d["text"]) for d in sidebar]
+def write_book_index(out_docs, book_slug, sidebar):
+    lines = ['<li><a href="/%s/%s/">%s</a></li>' % (book_slug, d["text"], d["text"]) for d in sidebar]
     home = """---
 layout: home
 hero:
   name: "%s"
-  tagline: %s
 ---
 
 <ol class="domain-order">
@@ -150,19 +139,19 @@ hero:
   text-decoration: underline;
 }
 </style>
-""" % (BOOK_SLUG, BOOK_TAGLINE, "\n".join(lines))
+""" % (book_slug, "\n".join(lines))
 
-    book_dir = os.path.join(out_docs, BOOK_SLUG)
+    book_dir = os.path.join(out_docs, book_slug)
     os.makedirs(book_dir, exist_ok=True)
     with open(os.path.join(book_dir, "index.md"), "w", encoding="utf-8", newline="\n") as f:
         f.write(home)
 
 
-def main():
-    text = open(DOCS_TXT, encoding="utf-8").read()
+def build_one_book(book_slug, docs_txt):
+    text = open(docs_txt, encoding="utf-8").read()
     lines = text.split("\n")
 
-    domains = []          # [{title, groups: [{title, posts: [{title, id}]}]}]
+    domains = []
     cur_domain = cur_group = None
 
     for line in lines:
@@ -182,7 +171,6 @@ def main():
             post_title = m3.group(1).strip()
             target = cur_group if cur_group is not None else None
             if target is None:
-                # domain with posts directly under it, no L2 group yet
                 cur_group = {"title": None, "posts": []}
                 cur_domain["groups"].append(cur_group)
                 target = cur_group
@@ -196,19 +184,18 @@ def main():
 
     total_posts = sum(len(g["posts"]) for d in domains for g in d["groups"])
     print("[%s] domains=%d groups=%d posts=%d" % (
-        BOOK_SLUG, len(domains), sum(len(d["groups"]) for d in domains), total_posts))
+        book_slug, len(domains), sum(len(d["groups"]) for d in domains), total_posts))
 
-    os.makedirs(OUT_DOCS, exist_ok=True)
     sidebar = []
     missing_content = []
-    flat_posts = []  # [{file_path, title, link, domain_title}] in reading order
+    flat_posts = []
 
     def domain_link(d):
-        return "/%s/%s/" % (BOOK_SLUG, slugify_path(d["title"]))
+        return "/%s/%s/" % (book_slug, slugify_path(d["title"]))
 
     for domain_idx, domain in enumerate(domains):
         domain_slug = slugify_path(domain["title"])
-        domain_dir = os.path.join(OUT_DOCS, BOOK_SLUG, domain_slug)
+        domain_dir = os.path.join(OUT_DOCS, book_slug, domain_slug)
         os.makedirs(domain_dir, exist_ok=True)
         sidebar_domain = {"text": domain["title"], "items": []}
 
@@ -228,7 +215,7 @@ def main():
                 file_path = os.path.join(domain_dir, post_slug + ".md")
                 with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                     f.write("# %s\n\n%s\n" % (post["title"], body))
-                link = "/%s/%s/%s" % (BOOK_SLUG, domain_slug, post_slug)
+                link = "/%s/%s/%s" % (book_slug, domain_slug, post_slug)
                 group_items.append({"text": post["title"], "link": link})
                 flat_posts.append({
                     "file_path": file_path, "title": post["title"],
@@ -247,11 +234,6 @@ def main():
         next_domain = (domains[domain_idx + 1]["title"], domain_link(domains[domain_idx + 1])) if domain_idx < len(domains) - 1 else None
         write_domain_index(domain_dir, sidebar_domain, prev_domain, next_domain)
 
-    # prev/next footer links, chained across the whole book in reading
-    # order - crossing from the last post of one domain straight into the
-    # first post of the next (rather than dead-ending at the end of each
-    # domain, which is what VitePress's own sidebar-scoped prev/next does,
-    # since each domain has its own separate sidebar config).
     for i, post in enumerate(flat_posts):
         frontmatter = {}
         if i > 0:
@@ -278,21 +260,37 @@ def main():
         with open(post["file_path"], "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(fm_lines) + "\n" + body)
 
-    write_book_index(OUT_DOCS, sidebar)
+    write_book_index(OUT_DOCS, book_slug, sidebar)
 
-    # NOTE: sidebar.json currently lives at the repo root and .vitepress/
-    # config.mjs reads just this one file - fine while there's only one
-    # book with content. When a second book gets its own build.py, this
-    # should become e.g. docs/<BOOK_SLUG>/.sidebar.json per book, and
-    # config.mjs updated to merge all of them. Not done yet since there's
-    # nothing to merge with.
-    with open(os.path.join(os.path.dirname(OUT_DOCS) or ".", "sidebar.json"),
-              "w", encoding="utf-8") as f:
-        json.dump(sidebar, f, ensure_ascii=False, indent=2)
-
-    print("[%s] missing content (%d):" % (BOOK_SLUG, len(missing_content)))
+    print("[%s] missing content (%d):" % (book_slug, len(missing_content)))
     for m in missing_content:
         print(" -", m)
+
+    return sidebar
+
+
+def main():
+    os.makedirs(OUT_DOCS, exist_ok=True)
+    book_files = sorted(glob.glob(os.path.join(BOOKS_SRC_DIR, "*.txt")))
+    if not book_files:
+        print("no books found in %s" % BOOKS_SRC_DIR)
+        return
+
+    all_sidebars = {}
+    books = []
+    for path in book_files:
+        filename = os.path.splitext(os.path.basename(path))[0]
+        book_slug = filename.replace("_", " ")
+        sidebar = build_one_book(book_slug, path)
+        all_sidebars[book_slug] = sidebar
+        books.append({"slug": book_slug})
+
+    with open(os.path.join(REPO_ROOT, "sidebar.json"), "w", encoding="utf-8") as f:
+        json.dump(all_sidebars, f, ensure_ascii=False, indent=2)
+    with open(os.path.join(REPO_ROOT, "books.json"), "w", encoding="utf-8") as f:
+        json.dump(books, f, ensure_ascii=False, indent=2)
+
+    print("built %d book(s): %s" % (len(books), ", ".join(b["slug"] for b in books)))
 
 
 if __name__ == "__main__":

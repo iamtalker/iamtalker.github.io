@@ -6,7 +6,7 @@ hero:
 ---
 
 <ol class="book-shelf">
-<li><a href="/자유로의 초대/">자유로의 초대</a><span class="tagline">개인 철학 에세이 — 내면에서 외면으로</span></li>
+<li><a href="/자유로의 초대/">자유로의 초대</a></li>
 </ol>
 
 <style>

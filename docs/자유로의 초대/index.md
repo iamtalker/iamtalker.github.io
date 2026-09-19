@@ -2,7 +2,6 @@
 layout: home
 hero:
   name: "자유로의 초대"
-  tagline: 개인 철학 에세이 — 내면에서 외면으로
 ---
 
 <ol class="domain-order">
