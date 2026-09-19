@@ -72,12 +72,32 @@ def md_from_wordblock(post_id):
     return md.strip()
 
 
-def write_domain_index(domain_dir, sidebar_domain):
+def write_domain_index(domain_dir, sidebar_domain, prev_domain, next_domain):
     # Plain markdown link syntax ([text](url)) doesn't get parsed inside
     # VitePress content here - it shows up as literal "[text](url)" text
     # on the page instead of a clickable link (same issue the home page
     # hit). Raw HTML <a> tags inside the list items render correctly.
-    lines = ["# %s\n" % sidebar_domain["text"]]
+    lines = []
+    # VitePress's own auto prev/next (derived from the active sidebar) only
+    # works for pages that are themselves listed as a "link" item in that
+    # sidebar - a domain's own index.md isn't (only its posts are), so it
+    # was showing an inconsistent prev/next (e.g. only "이전 장", no "다음
+    # 장"). Set both explicitly here, same as write_site() does for posts.
+    frontmatter = {}
+    if prev_domain:
+        frontmatter["prev"] = {"text": "이전 장: %s" % prev_domain[0], "link": prev_domain[1]}
+    if next_domain:
+        frontmatter["next"] = {"text": "다음 장: %s" % next_domain[0], "link": next_domain[1]}
+    if frontmatter:
+        lines.append("---")
+        for key in ("prev", "next"):
+            if key in frontmatter:
+                lines.append("%s:" % key)
+                lines.append("  text: %s" % json.dumps(frontmatter[key]["text"], ensure_ascii=False))
+                lines.append("  link: %s" % json.dumps(frontmatter[key]["link"], ensure_ascii=False))
+        lines.append("---\n")
+
+    lines.append("# %s\n" % sidebar_domain["text"])
 
     def walk(items):
         for it in items:
@@ -138,7 +158,10 @@ def main():
     missing_content = []
     flat_posts = []  # [{file_path, title, link, domain_title}] in reading order
 
-    for domain in domains:
+    def domain_link(d):
+        return "/%s/%s/" % (BOOK_SLUG, slugify_path(d["title"]))
+
+    for domain_idx, domain in enumerate(domains):
         domain_slug = slugify_path(domain["title"])
         domain_dir = os.path.join(OUT_DOCS, BOOK_SLUG, domain_slug)
         os.makedirs(domain_dir, exist_ok=True)
@@ -175,7 +198,9 @@ def main():
                 })
 
         sidebar.append(sidebar_domain)
-        write_domain_index(domain_dir, sidebar_domain)
+        prev_domain = (domains[domain_idx - 1]["title"], domain_link(domains[domain_idx - 1])) if domain_idx > 0 else None
+        next_domain = (domains[domain_idx + 1]["title"], domain_link(domains[domain_idx + 1])) if domain_idx < len(domains) - 1 else None
+        write_domain_index(domain_dir, sidebar_domain, prev_domain, next_domain)
 
     # prev/next footer links, chained across the whole book in reading
     # order - crossing from the last post of one domain straight into the
