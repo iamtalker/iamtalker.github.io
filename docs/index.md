@@ -7,7 +7,6 @@ hero:
 
 <ol class="book-shelf">
 <li><a href="/자유로의 초대/">자유로의 초대</a></li>
-<li><a href="/테스트/">테스트</a></li>
 </ol>
 
 <style>
