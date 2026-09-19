@@ -21,6 +21,12 @@ DOCS_TXT = os.path.join(PAGES_DIR, "iamtalker_docs.txt")
 OUT_DOCS = sys.argv[1] if len(sys.argv) > 1 else r"docs"
 PANDOC = r"C:\Users\misti\AppData\Local\Pandoc\pandoc.exe"
 
+# This whole DokuWiki collection is one "book" living at /<BOOK_SLUG>/ so
+# the site root stays free for a future library page listing several books
+# (see tools/build_library.py). Every other book gets its own converter
+# script and its own slug - this one is specific to iamtalker_docs.
+BOOK_SLUG = "자유로의 초대"
+
 
 def clean_id(raw):
     s = raw.replace(":", "")
