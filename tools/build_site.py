@@ -136,6 +136,7 @@ def main():
     os.makedirs(OUT_DOCS, exist_ok=True)
     sidebar = []
     missing_content = []
+    flat_posts = []  # [{file_path, title, link, domain_title}] in reading order
 
     for domain in domains:
         domain_slug = slugify_path(domain["title"])
@@ -161,6 +162,10 @@ def main():
                     f.write("# %s\n\n%s\n" % (post["title"], body))
                 link = "/%s/%s/%s" % (BOOK_SLUG, domain_slug, post_slug)
                 group_items.append({"text": post["title"], "link": link})
+                flat_posts.append({
+                    "file_path": file_path, "title": post["title"],
+                    "link": link, "domain_title": domain["title"],
+                })
 
             if group["title"] is None:
                 sidebar_domain["items"].extend(group_items)
@@ -171,6 +176,37 @@ def main():
 
         sidebar.append(sidebar_domain)
         write_domain_index(domain_dir, sidebar_domain)
+
+    # prev/next footer links, chained across the whole book in reading
+    # order - crossing from the last post of one domain straight into the
+    # first post of the next (rather than dead-ending at the end of each
+    # domain, which is what VitePress's own sidebar-scoped prev/next does,
+    # since each domain has its own separate sidebar config).
+    for i, post in enumerate(flat_posts):
+        frontmatter = {}
+        if i > 0:
+            prev = flat_posts[i - 1]
+            label = prev["title"]
+            if prev["domain_title"] != post["domain_title"]:
+                label = "이전 장: %s" % prev["domain_title"]
+            frontmatter["prev"] = {"text": label, "link": prev["link"]}
+        if i < len(flat_posts) - 1:
+            nxt = flat_posts[i + 1]
+            label = nxt["title"]
+            if nxt["domain_title"] != post["domain_title"]:
+                label = "다음 장: %s" % nxt["domain_title"]
+            frontmatter["next"] = {"text": label, "link": nxt["link"]}
+
+        body = open(post["file_path"], encoding="utf-8").read()
+        fm_lines = ["---"]
+        for key in ("prev", "next"):
+            if key in frontmatter:
+                fm_lines.append("%s:" % key)
+                fm_lines.append("  text: %s" % json.dumps(frontmatter[key]["text"], ensure_ascii=False))
+                fm_lines.append("  link: %s" % json.dumps(frontmatter[key]["link"], ensure_ascii=False))
+        fm_lines.append("---\n")
+        with open(post["file_path"], "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(fm_lines) + "\n" + body)
 
     with open(os.path.join(os.path.dirname(OUT_DOCS) or ".", "sidebar.json"),
               "w", encoding="utf-8") as f:
