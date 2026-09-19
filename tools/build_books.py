@@ -39,9 +39,11 @@ import unicodedata
 
 PAGES_DIR = r"C:\MyData\DokuWikiStick\dokuwiki\data\pages"
 BOOKS_SRC_DIR = os.path.join(PAGES_DIR, "github_io_books")
+MEDIA_DIR = os.path.join(os.path.dirname(PAGES_DIR), "media")
 OUT_DOCS = sys.argv[1] if len(sys.argv) > 1 else r"docs"
 PANDOC = r"C:\Users\misti\AppData\Local\Pandoc\pandoc.exe"
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PUBLIC_DIR = os.path.join(REPO_ROOT, "docs", "public")
 
 HEADER_RE = re.compile(r"^(={2,6})(?!=)\s*(.+?)\s*\1(?!=)\s*$")
 REF_RE = re.compile(r"page>([^&\n}]+)(&[^\n}]*)?")
@@ -233,7 +235,30 @@ def convert_dokuwiki(raw_text, title=None, ctx_count=6, seen=frozenset()):
     m = re.match(r"^#+\s+(.+?)\s*\n+", md)
     if m and title and normalize_heading(m.group(1)) == normalize_heading(title):
         md = md[m.end():]
+    localize_media(md)
     return md.strip()
+
+
+# pandoc turns a bare DokuWiki media reference ({{namespace:file.ext}},
+# no ">") into a root-relative markdown or raw-HTML image pointing at
+# "/namespace/file.ext" - convenient, because that's exactly the URL a
+# file placed under VitePress's docs/public/ would be served at. So
+# there's nothing to rewrite, just a copy to make: find the real file
+# under DokuWiki's own media/ tree (parallel to pages/) and place it at
+# the matching path under public/.
+IMAGE_SRC_RE = re.compile(r'!\[[^\]]*\]\((/[^)\s"]+)|<img\b[^>]*\bsrc="(/[^"]+)"')
+
+
+def localize_media(md):
+    for m in IMAGE_SRC_RE.finditer(md):
+        rel = (m.group(1) or m.group(2)).lstrip("/")
+        segments = rel.split("/")
+        src = os.path.join(MEDIA_DIR, *segments)
+        if not os.path.exists(src):
+            continue  # broken reference - leave it, same tolerance as a missing page
+        dest = os.path.join(PUBLIC_DIR, *segments)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copyfile(src, dest)
 
 
 def normalize_heading(s):
@@ -622,7 +647,7 @@ def main():
     current_slugs = {os.path.splitext(os.path.basename(p))[0].replace("_", " ") for p in book_files}
     for entry in os.listdir(OUT_DOCS):
         full = os.path.join(OUT_DOCS, entry)
-        if os.path.isdir(full) and not entry.startswith(".") and entry not in current_slugs:
+        if os.path.isdir(full) and not entry.startswith(".") and entry != "public" and entry not in current_slugs:
             shutil.rmtree(full)
             print("removed stale book output: %s" % entry)
 
