@@ -1,4 +1,5 @@
 ---
+giscus: false
 prev:
   text: "이전 장: 존재와 본질"
   link: "/자유로의 초대/존재와 본질/"

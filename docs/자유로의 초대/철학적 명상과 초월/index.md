@@ -1,4 +1,5 @@
 ---
+giscus: false
 prev:
   text: "이전 장: 인식과 의식"
   link: "/자유로의 초대/인식과 의식/"

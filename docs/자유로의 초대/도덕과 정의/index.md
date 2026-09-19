@@ -1,4 +1,5 @@
 ---
+giscus: false
 prev:
   text: "이전 장: 상징과 사유체계"
   link: "/자유로의 초대/상징과 사유체계/"

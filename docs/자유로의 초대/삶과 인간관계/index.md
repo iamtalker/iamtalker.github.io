@@ -1,4 +1,5 @@
 ---
+giscus: false
 prev:
   text: "이전 장: 종교와 신앙"
   link: "/자유로의 초대/종교와 신앙/"

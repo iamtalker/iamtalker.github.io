@@ -1,4 +1,5 @@
 ---
+giscus: false
 prev:
   text: "이전 장: 삶과 인간관계"
   link: "/자유로의 초대/삶과 인간관계/"
