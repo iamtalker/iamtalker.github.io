@@ -19,9 +19,29 @@ hero:
   tagline: 개인 철학 에세이 — 내면에서 외면으로
 ---
 
+<ol class="domain-order">
 %s
+</ol>
+
+<style>
+.domain-order {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 24px;
+  font-size: 18px;
+  line-height: 2.4;
+}
+.domain-order a {
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+}
+.domain-order a:hover {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+}
+</style>
 """ % "\n".join(
-    "%d. [%s](/%s/)" % (i, d["text"], d["text"]) for i, d in enumerate(sidebar, 1)
+    '<li><a href="/%s/">%s</a></li>' % (d["text"], d["text"]) for d in sidebar
 )
 
 with open(INDEX_MD, "w", encoding="utf-8", newline="\n") as f:
