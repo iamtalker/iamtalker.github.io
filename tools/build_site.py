@@ -166,7 +166,7 @@ def main():
                 sidebar_domain["items"].extend(group_items)
             else:
                 sidebar_domain["items"].append({
-                    "text": group["title"], "collapsed": True, "items": group_items,
+                    "text": group["title"], "collapsed": False, "items": group_items,
                 })
 
         sidebar.append(sidebar_domain)
