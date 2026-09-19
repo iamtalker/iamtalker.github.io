@@ -32,6 +32,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -459,6 +460,16 @@ def main():
     if not book_files:
         print("no books found in %s" % BOOKS_SRC_DIR)
         return
+
+    # removing a book is the mirror of adding one: delete its .txt and
+    # nothing else. Prune any docs/<slug> output left over from a book
+    # file that's since been deleted, so it stops being served.
+    current_slugs = {os.path.splitext(os.path.basename(p))[0].replace("_", " ") for p in book_files}
+    for entry in os.listdir(OUT_DOCS):
+        full = os.path.join(OUT_DOCS, entry)
+        if os.path.isdir(full) and not entry.startswith(".") and entry not in current_slugs:
+            shutil.rmtree(full)
+            print("removed stale book output: %s" % entry)
 
     all_sidebars = {}
     books = []
