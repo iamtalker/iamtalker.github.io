@@ -66,6 +66,26 @@ def md_from_wordblock(post_id):
     return md.strip()
 
 
+def write_domain_index(domain_dir, sidebar_domain):
+    # Plain markdown link syntax ([text](url)) doesn't get parsed inside
+    # VitePress content here - it shows up as literal "[text](url)" text
+    # on the page instead of a clickable link (same issue the home page
+    # hit). Raw HTML <a> tags inside the list items render correctly.
+    lines = ["# %s\n" % sidebar_domain["text"]]
+
+    def walk(items):
+        for it in items:
+            if "link" in it:
+                lines.append('- <a href="%s">%s</a>' % (it["link"], it["text"]))
+            else:
+                lines.append("\n**%s**\n" % it["text"])
+                walk(it["items"])
+
+    walk(sidebar_domain["items"])
+    with open(os.path.join(domain_dir, "index.md"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def main():
     text = open(DOCS_TXT, encoding="utf-8").read()
     lines = text.split("\n")
@@ -144,6 +164,7 @@ def main():
                 })
 
         sidebar.append(sidebar_domain)
+        write_domain_index(domain_dir, sidebar_domain)
 
     with open(os.path.join(os.path.dirname(OUT_DOCS) or ".", "sidebar.json"),
               "w", encoding="utf-8") as f:
