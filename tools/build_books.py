@@ -613,6 +613,28 @@ def build_one_book(book_slug, docs_txt):
                 missing.append("%s: %s" % (d_title, e))
                 continue
             sections = split_leaf_markdown(md) if count_headings(md) > LEAF_SPLIT_HEADING_THRESHOLD else None
+            if sections and len(top) == 1:
+                # this domain IS the whole book (its only top-level
+                # heading) - the domain layer adds nothing a reader can
+                # see (its own title already duplicates the book's), so
+                # skip it entirely: each split section is promoted
+                # straight to the book's own top level, exactly like an
+                # ordinary 대분류 the book file wrote directly - visible
+                # as a plain link on the book's own title page (같은
+                # 자유로의 초대), never inside a sidebar, until you click
+                # into one and see ITS OWN internal headings there.
+                book_dir = os.path.join(OUT_DOCS, book_slug)
+                os.makedirs(book_dir, exist_ok=True)
+                for sec_title, sec_md in sections:
+                    sec_slug = slugify_path(sec_title)
+                    file_path = os.path.join(book_dir, sec_slug + ".md")
+                    with open(file_path, "w", encoding="utf-8", newline="\n") as f:
+                        f.write("# %s\n\n%s\n" % (sec_title, sec_md))
+                    link = domain_link_leaf(sec_slug)
+                    sidebar_items.append(sidebar_leaf_entry(sec_title, link, sec_md))
+                    flat_posts.append({"file_path": file_path, "title": sec_title, "link": link, "chapter_title": sec_title})
+                    domain_entries.append((sec_title, "leaf", link))
+                continue
             if sections:
                 # too many headings for one page's sidebar tree to stay
                 # usable (it would dwarf every other book's navigation) -
