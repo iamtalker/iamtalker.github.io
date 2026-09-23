@@ -494,6 +494,14 @@ hero:
 def build_one_book(book_slug, docs_txt):
     lines = open(docs_txt, encoding="utf-8").read().split("\n")
     headers = parse_headers(lines)
+    if not headers:
+        # no headers anywhere in the file - any domain/group heading can
+        # already be a bare leaf on its own (own_ref/has_content, no
+        # children needed), so a book file that's just one reference (or
+        # hand-written text) with no wrapping header shouldn't need one
+        # either. Synthesize a single implicit top-level heading titled
+        # after the book itself, spanning the whole file as its body.
+        headers = [(-1, 6, book_slug)]
     headers.append((len(lines), 999, None))  # sentinel, closes any open section
 
     # top-level (domain) headers: those not nested inside another header.
