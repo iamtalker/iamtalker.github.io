@@ -188,7 +188,7 @@ def expand_includes(raw_text, target_shallowest, seen):
         path, anchor = resolve_ref_path(m.group(1))
         if path is None or not os.path.exists(path) or path in seen:
             continue
-        inner = open(path, encoding="utf-8").read()
+        inner = open(path, encoding="utf-8-sig").read()
         if anchor:
             section = extract_anchor_section(inner, anchor)
             if section is not None:
@@ -316,14 +316,18 @@ MD_HEADING_RE = re.compile(r"^(#{2,6})[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 # confirmed against the real built HTML (this is why a DokuWiki header
 # written with underscores, "귀납법적_착시로_...", or a colon, "번역:
 # 여성혐오", lands as hyphens in the real id, not deleted or left as-is).
+# Curly/smart quotes (‘’“”) belong here too, not dropped - a news-
+# headline-style heading like 「’노벨상 로비설’은 무지의...」 needs the
+# quote right before "은" to become a hyphen, or the two words merge
+# into one wrong id ("로비설은" instead of the real "로비설-은").
 SLUG_SEPARATOR_RE = re.compile(
-    r"[\s~`!@#$%^&*()\-_+=\[\]{}|\\;:\"'<>,.?/…]+"
+    r"[\s~`!@#$%^&*()\-_+=\[\]{}|\\;:\"'<>,.?/…‘’“”]+"
 )
-# curly/smart quotes are dropped outright (no hyphen left behind) -
-# confirmed against a real news-headline-style heading ("최고"...OECD)
-# where the quote around "최고" vanishes but the "..." after it becomes
-# a hyphen (handled by … above).
-SLUG_DROP_RE = re.compile(r"[‘’“”]")
+# a stray UTF-8 BOM landing mid-heading (a source file saved with one,
+# spliced in via an include) is invisible but not whitespace to regex -
+# drop it outright rather than let it become a leading "-" or get eaten
+# into a word.
+SLUG_DROP_RE = re.compile(r"[﻿]")
 
 
 def vitepress_slug(text, seen):
@@ -361,6 +365,45 @@ def sidebar_leaf_entry(title, link, md):
     if sub_items:
         return {"text": title, "link": link, "collapsed": True, "items": sub_items}
     return {"text": title, "link": link}
+
+
+# a leaf whose own resolved content turns out to carry this many headings
+# (e.g. a hub page that's really a running reference/encyclopedia, not a
+# single essay) makes the sidebar tree from sidebar_leaf_entry dwarf every
+# other book's navigation - past this point, split it into its own mini
+# "book" instead: its top-level (h2) headings become separate pages under
+# an index page, exactly like an ordinary book-file container already
+# works (대분류 → 소주제 사이드바), just derived from the leaf's own content
+# instead of literal headers in the book file.
+LEAF_SPLIT_HEADING_THRESHOLD = 40
+
+
+def count_headings(md):
+    return sum(1 for _ in MD_HEADING_RE.finditer(md))
+
+
+def split_leaf_markdown(md):
+    """Splits already-rendered markdown (starts at h2+, its own "# title"
+    is written separately) into top-level h2 sections. Each section's own
+    headings are shifted up one level (h3->h2, h4->h3, ...) so it reads
+    exactly like an ordinary leaf's body once given its own "# title"."""
+    lines = md.split("\n")
+    starts = []
+    for i, line in enumerate(lines):
+        hm = re.match(r"^(#{2,6})(?:[ \t]+(.+?))?[ \t]*$", line)
+        if hm and len(hm.group(1)) == 2:
+            starts.append((i, (hm.group(2) or "").strip()))
+    if len(starts) < 2:
+        return None  # nothing meaningful to split into multiple pages
+    sections = []
+    for idx, (start, title) in enumerate(starts):
+        end = starts[idx + 1][0] if idx + 1 < len(starts) else len(lines)
+        body_lines = []
+        for line in lines[start + 1:end]:
+            hm2 = re.match(r"^(#{3,6})([ \t].*)?$", line)
+            body_lines.append("#" * (len(hm2.group(1)) - 1) + (hm2.group(2) or "") if hm2 else line)
+        sections.append((title or "section", "\n".join(body_lines).strip()))
+    return sections
 
 
 def build_heading_sidebar(md, base_link):
@@ -401,7 +444,7 @@ def get_leaf_markdown(ref, inline_body, title, ctx_count):
         path, anchor = resolve_ref_path(ref)
         if path is None or not os.path.exists(path):
             raise FileNotFoundError("no file for reference %r (looked for %s)" % (ref, path))
-        raw = open(path, encoding="utf-8").read()
+        raw = open(path, encoding="utf-8-sig").read()
         if anchor:
             section = extract_anchor_section(raw, anchor)
             if section is not None:
@@ -492,7 +535,18 @@ hero:
 
 
 def build_one_book(book_slug, docs_txt):
-    lines = open(docs_txt, encoding="utf-8").read().split("\n")
+    # wipe this book's own output dir before regenerating it fresh. Not
+    # just tidiness: a domain can change shape between builds (e.g. a
+    # flat leaf .md file growing enough headings to become a split
+    # container directory of the same name, or vice versa) and nothing
+    # else notices the old file/folder no longer belongs - it just sits
+    # there orphaned forever otherwise (caught a 900KB stale leaf file
+    # exactly this way).
+    book_out_dir = os.path.join(OUT_DOCS, book_slug)
+    if os.path.isdir(book_out_dir):
+        shutil.rmtree(book_out_dir)
+
+    lines = open(docs_txt, encoding="utf-8-sig").read().split("\n")
     headers = parse_headers(lines)
     if not headers:
         # no headers anywhere in the file - any domain/group heading can
@@ -553,12 +607,35 @@ def build_one_book(book_slug, docs_txt):
 
         if not children and (own_ref or has_content(own_body)):
             # domain is itself a post
-            file_path = os.path.join(OUT_DOCS, book_slug, d_slug + ".md")
             try:
                 md = get_leaf_markdown(own_ref, own_body, d_title, d_count)
             except Exception as e:
                 missing.append("%s: %s" % (d_title, e))
                 continue
+            sections = split_leaf_markdown(md) if count_headings(md) > LEAF_SPLIT_HEADING_THRESHOLD else None
+            if sections:
+                # too many headings for one page's sidebar tree to stay
+                # usable (it would dwarf every other book's navigation) -
+                # split into its own mini-book instead: each of its own
+                # top-level headings becomes a separate page, and this
+                # domain becomes a container of them (index.md + prev/next
+                # handled by the exact same machinery every ordinary
+                # 대분류 container already uses, via domain_entries below).
+                domain_dir = os.path.join(OUT_DOCS, book_slug, d_slug)
+                os.makedirs(domain_dir, exist_ok=True)
+                group_items = []
+                for sec_title, sec_md in sections:
+                    sec_slug = slugify_path(sec_title)
+                    file_path = os.path.join(domain_dir, sec_slug + ".md")
+                    with open(file_path, "w", encoding="utf-8", newline="\n") as f:
+                        f.write("# %s\n\n%s\n" % (sec_title, sec_md))
+                    link = "/%s/%s/%s" % (book_slug, d_slug, sec_slug)
+                    group_items.append(sidebar_leaf_entry(sec_title, link, sec_md))
+                    flat_posts.append({"file_path": file_path, "title": sec_title, "link": link, "chapter_title": d_title})
+                sidebar_items.append({"text": d_title, "items": group_items})
+                domain_entries.append((d_title, "container", domain_dir, group_items))
+                continue
+            file_path = os.path.join(OUT_DOCS, book_slug, d_slug + ".md")
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                 f.write("# %s\n\n%s\n" % (d_title, md))
