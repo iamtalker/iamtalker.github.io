@@ -250,7 +250,7 @@ def convert_dokuwiki(raw_text, title=None, ctx_count=6, seen=frozenset()):
     m = re.match(r"^#+\s+(.+?)\s*\n+", md)
     if m and title and normalize_heading(m.group(1)) == normalize_heading(title):
         md = md[m.end():]
-    localize_media(md)
+    md = localize_media(md)
     return md.strip()
 
 
@@ -262,18 +262,45 @@ def convert_dokuwiki(raw_text, title=None, ctx_count=6, seen=frozenset()):
 # under DokuWiki's own media/ tree (parallel to pages/) and place it at
 # the matching path under public/.
 IMAGE_SRC_RE = re.compile(r'!\[[^\]]*\]\((/[^)\s"]+)|<img\b[^>]*\bsrc="(/[^"]+)"')
+# a DokuWiki reference with the wrong extension typed (real file is
+# .jpg, page says .png) is a real-world typo, not a hypothetical -
+# tried with the extension as given first, then these as a fallback.
+MEDIA_FALLBACK_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
+
+
+def resolve_media_src(rel):
+    segments = rel.split("/")
+    src = os.path.join(MEDIA_DIR, *segments)
+    if os.path.exists(src):
+        return src
+    base, ext = os.path.splitext(src)
+    if ext.lower() in MEDIA_FALLBACK_EXTS:
+        for alt in MEDIA_FALLBACK_EXTS:
+            if alt != ext.lower() and os.path.exists(base + alt):
+                return base + alt
+    return None
 
 
 def localize_media(md):
-    for m in IMAGE_SRC_RE.finditer(md):
+    def repl(m):
+        whole = m.group(0)
         rel = (m.group(1) or m.group(2)).lstrip("/")
+        src = resolve_media_src(rel)
+        if src is None:
+            # VitePress's production build (Rollup) treats an
+            # unresolvable root-relative image src as a HARD build
+            # failure - not a warning, the whole site fails to deploy.
+            # One broken reference in one book must never be able to
+            # take every book down, so drop it here instead of leaving
+            # it for Rollup to choke on.
+            print("  [media missing, dropped] /%s" % rel)
+            return ""
         segments = rel.split("/")
-        src = os.path.join(MEDIA_DIR, *segments)
-        if not os.path.exists(src):
-            continue  # broken reference - leave it, same tolerance as a missing page
         dest = os.path.join(PUBLIC_DIR, *segments)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copyfile(src, dest)
+        return whole
+    return IMAGE_SRC_RE.sub(repl, md)
 
 
 def normalize_heading(s):
