@@ -632,7 +632,17 @@ def build_one_book(book_slug, docs_txt):
                         f.write("# %s\n\n%s\n" % (sec_title, sec_md))
                     link = domain_link_leaf(sec_slug)
                     sidebar_items.append(sidebar_leaf_entry(sec_title, link, sec_md))
-                    flat_posts.append({"file_path": file_path, "title": sec_title, "link": link, "chapter_title": sec_title})
+                    # chapter_title is d_title (the original, now-collapsed
+                    # domain) for every section, not each section's own
+                    # title - they're all pieces of the same original
+                    # document, so the footer should read "다음 글"
+                    # between them (still "다음 장" only once you leave
+                    # this book's own content for something genuinely
+                    # different). domain_entries below keeps each
+                    # section's own title, though - that drives the
+                    # sidebar's "이전 장 / 다음 장" links between sibling
+                    # sections, which should stay distinct.
+                    flat_posts.append({"file_path": file_path, "title": sec_title, "link": link, "chapter_title": d_title})
                     domain_entries.append((sec_title, "leaf", link))
                 continue
             if sections:
