@@ -1,11 +1,11 @@
 {
-  "title": "",
+  "title": "test",
   "tagline": "",
   "description": "",
   "lang": "ko-KR",
   "giscus": {
-    "repo": "https://iamtalker.github.io/",
-    "repoId": "",
+    "repo": "iamtalker/iamtalker.github.io.git",
+    "repoId": "iamtalker",
     "category": "Announcements",
     "categoryId": ""
   }

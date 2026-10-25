@@ -1,7 +1,7 @@
 ---
 layout: home
 hero:
-  name: ""
+  name: "test"
   tagline: ""
 ---
 
