@@ -2,12 +2,10 @@
 """Settings window: fill in the form instead of editing text files.
 
 Saves config.json (this PC's paths) and site.json (site title etc.).
-Run it with settings.bat; update.bat opens it automatically on first use.
+Opened from the [설정] button of app.py (update.bat); on first use it shows the wizard.
 """
 import os
 import re
-import shutil
-import subprocess
 import sys
 import tkinter as tk
 import tkinter.font as tkfont
@@ -16,6 +14,7 @@ from tkinter import filedialog, messagebox, ttk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config  # noqa: E402
+import remote_check  # noqa: E402
 
 
 def clean_repo(text):
@@ -24,6 +23,12 @@ def clean_repo(text):
 
 
 def main():
+    # first run (no config.json yet): the step-by-step wizard instead of the full form
+    if not os.path.exists(config.CONFIG_PATH) and "--full" not in sys.argv:
+        import wizard
+        wizard.run()
+        return
+
     local = config.load_local()
     site = config.load_site()
 
@@ -243,61 +248,11 @@ def main():
     section("GitHub 업로드")
 
     def check_remote():
-        url = vars_["git_remote"].get().strip()
-        if not url:
-            messagebox.showerror("연결 확인", "저장소 주소를 입력하세요.")
-            return
-        if not re.match(r"https?://github\.com/[^/\s]+/[^/\s]+$", url):
-            hint = ""
-            if re.match(r"^[^/\s:]+/[^/\s:]+$", url):
-                hint = "\n'아이디/저장소이름'만 쓰셨네요. 앞에 https://github.com/ 를 붙여\n" \
-                       "https://github.com/%s.git 형태로 쓰세요." % re.sub(r"\.git$", "", url)
-            messagebox.showerror(
-                "연결 확인",
-                "주소 형태가 올바르지 않습니다.\n정확한 형태: https://github.com/아이디/저장소이름.git" + hint)
-            return
-        if not shutil.which("git"):
-            messagebox.showerror("연결 확인", "git이 설치되어 있지 않습니다. https://git-scm.com 에서 설치하세요.")
-            return
-        env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
-        try:
-            r = subprocess.run(
-                ["git", "ls-remote", "--heads", url], capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=30, env=env)
-        except subprocess.TimeoutExpired:
-            messagebox.showerror("연결 확인", "30초 안에 응답이 없습니다.")
-            return
-        if r.returncode != 0:
-            err = r.stderr.strip()
-            low = err.lower()
-            if "could not resolve host" in low or "unable to access" in low and "resolve" in low:
-                why = "인터넷에 연결되어 있지 않거나 주소의 도메인이 틀렸습니다."
-            elif "not found" in low or "repository" in low and "exist" in low:
-                why = ("GitHub에 이 저장소가 없습니다. 아이디나 저장소 이름의 철자를 확인하거나,\n"
-                       "저장소를 아직 만들지 않았다면 먼저 만드세요. 비공개 저장소라면 아직 로그인 전일 수도 있습니다.")
-            elif "authentication" in low or "terminal prompts disabled" in low or "403" in low:
-                why = ("로그인이 필요한 저장소입니다. 첫 업로드 때 git이 브라우저로 로그인을 물어보니\n"
-                       "그때 로그인하면 됩니다. (주소는 맞을 가능성이 높습니다.)")
-            else:
-                why = "주소가 틀렸거나 로그인이 필요할 수 있습니다."
-            messagebox.showwarning("연결 확인", "접근하지 못했습니다.\n\n" + why + "\n\n(git 메시지)\n" + err)
-            return
-
-        heads = [ln.split("refs/heads/")[-1] for ln in r.stdout.splitlines() if "refs/heads/" in ln]
-        branch = vars_["git_branch"].get().strip() or "main"
-        if not heads:
-            messagebox.showinfo("연결 확인", "저장소에 접근할 수 있습니다.\n비어 있는 저장소라 바로 업로드할 수 있습니다.")
-        elif branch not in heads:
-            messagebox.showwarning(
-                "연결 확인",
-                "저장소에 접근할 수 있습니다.\n하지만 '%s' 브랜치가 없고 '%s' 브랜치가 있습니다.\n"
-                "아래 '브랜치' 칸을 '%s'로 바꾸거나, GitHub Pages가 쓰는 브랜치를 확인하세요."
-                % (branch, ", ".join(heads), heads[0]))
-        else:
-            messagebox.showinfo(
-                "연결 확인",
-                "저장소에 접근할 수 있습니다.\n이미 올라간 내용이 있습니다. 처음 업로드할 때 거절되면\n"
-                "update.bat이 기존 내용을 지우고 덮어쓸지 물어봅니다.")
+        kind, msg = remote_check.check(
+            vars_["git_remote"].get(), vars_["git_branch"].get())
+        show = {"ok": messagebox.showinfo, "warn": messagebox.showwarning,
+                "error": messagebox.showerror}[kind]
+        show("연결 확인", msg)
 
     field("저장소 주소", "git_remote", check_remote,
           "GitHub에서 만든 저장소 페이지의 초록색 'Code' 버튼 → HTTPS 탭에 나오는 주소를\n"
@@ -309,7 +264,7 @@ def main():
     field("커밋 메시지", "commit_message")
     note("로그인 정보(비밀번호/토큰)는 이 프로그램이 저장하지 않고 git 이 관리합니다.")
     ttk.Checkbutton(
-        frm, text="빌드 후 GitHub 에 자동 업로드 (update.bat)",
+        frm, text="변환 후 GitHub 에 자동 업로드 ([사이트에 올리기])",
         variable=vars_["auto_push"],
     ).grid(row=row, column=0, columnspan=3, sticky="w")
     row += 1
@@ -367,6 +322,11 @@ def main():
 
     btns = ttk.Frame(root, padding=(16, 8))
     btns.grid(row=1, column=0, columnspan=2, sticky="e")
+    def rerun_wizard():
+        root.destroy()
+        import wizard
+        wizard.run()
+    ttk.Button(btns, text="처음 설정 마법사", command=rerun_wizard).grid(row=0, column=2, padx=(24, 0))
     ttk.Button(btns, text="취소", command=root.destroy).grid(row=0, column=0, padx=6)
     ttk.Button(btns, text="저장", command=save).grid(row=0, column=1)
 

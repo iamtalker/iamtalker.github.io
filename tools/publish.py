@@ -25,6 +25,15 @@ def git(*args, capture=True):
     )
 
 
+def ask(question):
+    """y/n question. Under the app window (BOOK_GUI=1) the window shows the
+    dialog: we print a marker line with the question and read its answer."""
+    if os.environ.get("BOOK_GUI"):
+        print("@@ASK@@" + json.dumps(question, ensure_ascii=False), flush=True)
+        return sys.stdin.readline()
+    return input(question + " [y/N] ")
+
+
 def fail(msg):
     print(msg)
     sys.exit(1)
@@ -37,13 +46,13 @@ def main():
     message = local["commit_message"].strip() or "content update"
 
     if not shutil.which("git"):
-        fail("git is not installed (https://git-scm.com/download/win).")
+        fail("git 이 설치되어 있지 않습니다. https://git-scm.com/download/win 에서 설치하세요.")
 
     if not os.path.isdir(os.path.join(ROOT, ".git")):
         r = git("init", "-b", branch)
         if r.returncode != 0:
-            fail("git init failed:\n" + r.stderr)
-        print("Initialized a new git repository.")
+            fail("git 저장소를 만들지 못했습니다:\n" + r.stderr)
+        print("새 git 저장소를 만들었습니다.")
 
     current = git("remote", "get-url", "origin")
     if url:
@@ -52,17 +61,17 @@ def main():
         elif current.stdout.strip() != url:
             git("remote", "set-url", "origin", url)
     elif current.returncode != 0:
-        fail("GitHub repository URL is not set - fill it in with settings.bat.")
+        fail("GitHub 저장소 주소가 비어 있습니다. [설정]에서 입력하세요.")
 
     git("add", "-A")
     if not git("status", "--porcelain").stdout.strip():
-        print("No changes to commit.")
+        print("새로 바뀐 내용이 없습니다.")
         # still push: an earlier commit may not have reached GitHub yet
     else:
         r = git("commit", "-m", message)
         if r.returncode != 0:
-            fail("git commit failed:\n" + r.stdout + r.stderr +
-                 "\nIf git asks who you are, run:\n"
+            fail("git 커밋에 실패했습니다:\n" + r.stdout + r.stderr +
+                 "\n'누구인지 모르겠다'는 메시지라면 아래를 한 번 실행하세요:\n"
                  '  git config --global user.name "Your Name"\n'
                  '  git config --global user.email "you@example.com"')
 
@@ -71,9 +80,9 @@ def main():
         if remote_has_other_content(branch):
             r = overwrite_remote(branch)
         if r.returncode != 0:
-            fail("git push failed - see the message above. (Is the repository URL "
-             "right, and are you logged in to GitHub?)")
-    print("Pushed to %s (%s)." % (url or "origin", branch))
+            fail("GitHub에 올리지 못했습니다. 위 메시지를 확인하세요.\n"
+                 "(저장소 주소가 맞는지, GitHub에 로그인했는지 확인해 보세요.)")
+    print("GitHub에 올렸습니다: %s (%s)" % (url or "origin", branch))
 
 
 def book_slugs(text):
@@ -110,7 +119,10 @@ def overwrite_remote(branch):
         print("사라지는 책:")
         for b in only_remote:
             print("  -", b)
-    if input("덮어쓸까요? [y/N] ").strip().lower() != "y":
+    question = "GitHub의 기존 내용을 지우고 이 폴더 내용으로 덮어쓸까요?"
+    if only_remote:
+        question += "\n\n사라지는 책:\n" + "\n".join("  - " + b for b in only_remote)
+    if ask(question).strip().lower() != "y":
         fail("덮어쓰지 않았습니다. 아무것도 올리지 않았습니다.")
 
     # lease: refuse if someone pushed again after the fetch above

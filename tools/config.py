@@ -23,7 +23,7 @@ DEFAULT_LOCAL = {
     "books_dir": "",          # folder holding one .txt per book, inside .../dokuwiki/data/pages
     "media_dir": "",          # blank = sibling "media" folder next to the "pages" folder
     "pandoc": "",             # blank = look for "pandoc" on PATH
-    "auto_push": True,        # update.bat: git commit + push after building
+    "auto_push": True,        # [사이트에 올리기]: git commit + push after building
     "git_remote": "",         # e.g. https://github.com/<id>/<id>.github.io.git
     "git_branch": "main",     # branch GitHub Pages deploys from
     "commit_message": "content update",
@@ -110,7 +110,7 @@ def resolved_paths(local=None):
 def require_ready():
     """Return resolved paths, or exit with a pointer to the settings window."""
     if not os.path.exists(CONFIG_PATH):
-        raise SystemExit("config.json not found - run settings.bat first.")
+        raise SystemExit("config.json not found - open the app (update.bat) and use [설정].")
     local = load_local()
     paths = resolved_paths(local)
     problems = []
@@ -120,9 +120,9 @@ def require_ready():
         if not os.path.isdir(paths["books_src_dir"]):
             problems.append("Books folder not found: %r" % paths["books_src_dir"])
         if not paths["pandoc"]:
-            problems.append("pandoc not found (install it, or set its path in settings.bat)")
+            problems.append("pandoc not found (install it, or set its path in [설정])")
     if local["use_markdown"] and not os.path.isdir(local["markdown_dir"]):
         problems.append("Markdown folder not found: %r" % local["markdown_dir"])
     if problems:
-        raise SystemExit("\n".join(problems + ["", "Fix these in settings.bat."]))
+        raise SystemExit("\n".join(problems + ["", "Fix these in [설정]."]))
     return paths
