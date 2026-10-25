@@ -31,6 +31,9 @@ const books = JSON.parse(
 // sidesteps this entirely - and makes every chapter behave the same
 // way, container or leaf.)
 const sidebarEntries = []
+// same rule as slugify_path() in tools/build_books.py
+const slugifyPath = (title) =>
+  title.trim().replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim()
 for (const [bookSlug, sidebarDomains] of Object.entries(sidebarByBook)) {
   sidebarDomains.forEach((domain, i) => {
     const prevDomain = i > 0 ? sidebarDomains[i - 1] : null
@@ -40,13 +43,15 @@ for (const [bookSlug, sidebarDomains] of Object.entries(sidebarByBook)) {
     // heading sub-tree; only a container domain (own folder, no single
     // page of its own) lacks "link" entirely - so "link" is what tells
     // the two apart now, not "items".
-    const domainLink = (d) => d.link || `/${bookSlug}/${d.text}/`
+    // A container's folder on disk is named by slugifyPath(title), not the
+    // title itself ("3. 준비: 자세와 환경" lives in "3. 준비- 자세와 환경").
+    const domainLink = (d) => d.link || `/${bookSlug}/${slugifyPath(d.text)}/`
 
     const items = []
     if (prevDomain) items.push({ text: `← 이전 장: ${prevDomain.text}`, link: domainLink(prevDomain) })
     items.push(domain)
     if (nextDomain) items.push({ text: `다음 장: ${nextDomain.text} →`, link: domainLink(nextDomain) })
-    const key = domain.link ? `/${bookSlug}/${domain.text}` : `/${bookSlug}/${domain.text}/`
+    const key = domain.link ? domain.link : domainLink(domain)
     sidebarEntries.push([key, items])
   })
 }
