@@ -102,28 +102,27 @@ def merge_existing_remote(branch):
     only_remote = [b for b in remote_books if b not in local_books]
 
     print()
-    print("GitHub already has content that this folder doesn't:")
-    for b in only_remote or ["(no extra books, other files only)"]:
+    print("GitHub에는 이미 있지만 이 폴더에는 없는 내용이 있습니다:")
+    for b in only_remote or ["(추가된 책은 없고 다른 파일만 있음)"]:
         print("  -", b)
-    print("Merge it in and keep it? (this folder's files win on conflicts)")
+    print("그 내용을 합쳐서 보존할까요? (겹치는 파일은 이 폴더 것이 우선)")
     if input("[y/N] ").strip().lower() != "y":
-        fail("Not merged. Nothing was uploaded.")
+        fail("합치지 않았습니다. 아무것도 올리지 않았습니다.")
 
     r = git("merge", ref, "--allow-unrelated-histories", "-X", "ours",
             "-m", "Merge existing GitHub content")
     if r.returncode != 0:
         git("merge", "--abort")
-        fail("Merge failed, nothing changed:\n" + r.stdout + r.stderr)
+        fail("합치기에 실패했습니다. 아무것도 바뀌지 않았습니다:\n" + r.stdout + r.stderr)
 
-    print("Merged. A book is only kept on the next build if its source is in "
-          "the settings.")
+    print("합쳤습니다. 다음 빌드에서는 설정에 소스가 등록된 책만 남습니다.")
     if only_remote:
-        print("Add the source of these books in settings.bat, then run "
-              "update.bat again to build and upload everything:")
+        print("settings.bat에서 아래 책들의 소스를 추가한 뒤 update.bat을 "
+              "다시 실행하면 전부 빌드해서 올립니다:")
         for b in only_remote:
             print("  -", b)
     else:
-        print("Run update.bat again to upload.")
+        print("update.bat을 다시 실행하면 올라갑니다.")
     sys.exit(1)
 
 
