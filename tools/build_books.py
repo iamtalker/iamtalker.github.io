@@ -571,15 +571,29 @@ def build_one_book(book_slug, source_text):
 
     # top-level (domain) headers: those not nested inside another header.
     # A header's span runs until the next header at count >= its own.
-    top = []
-    m = 0
-    while m < len(headers) - 1:
-        count = headers[m][1]
-        end_idx = m + 1
-        while headers[end_idx][1] < count:
-            end_idx += 1
-        top.append((m, end_idx))
-        m = end_idx
+    def find_top():
+        found = []
+        m = 0
+        while m < len(headers) - 1:
+            count = headers[m][1]
+            end_idx = m + 1
+            while headers[end_idx][1] < count:
+                end_idx += 1
+            found.append((m, end_idx))
+            m = end_idx
+        return found
+
+    top = find_top()
+    # A file whose only top-level heading is a page title wrapping everything
+    # (the usual "====== Book name ======" first line) would give the book a
+    # single chapter named like the book itself - one pointless extra click.
+    # Drop that title so its sub-headings become the chapters.
+    if len(top) == 1 and top[0][1] - top[0][0] > 1:
+        t_line = headers[0][0]
+        t_body = lines[t_line + 1: headers[1][0]]
+        if not find_ref(t_body):
+            del headers[0]
+            top = find_top()
 
     missing = []
     flat_posts = []  # [{file_path, title, link, chapter_title}] doc order, leaves only

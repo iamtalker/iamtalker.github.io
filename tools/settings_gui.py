@@ -21,16 +21,27 @@ def main():
 
     root = tk.Tk()
     root.title("사이트 설정")
-    root.resizable(False, False)
-    frm = ttk.Frame(root, padding=16)
-    frm.grid()
+    # the form scrolls inside a canvas; the save/cancel bar stays fixed below it
+    canvas = tk.Canvas(root, highlightthickness=0)
+    vbar = ttk.Scrollbar(root, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=vbar.set)
+    canvas.grid(row=0, column=0, sticky="nsew")
+    vbar.grid(row=0, column=1, sticky="ns")
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(0, weight=1)
+    frm = ttk.Frame(canvas, padding=16)
+    frm_id = canvas.create_window((0, 0), window=frm, anchor="nw")
+    frm.columnconfigure(1, weight=1)
+    frm.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.bind("<Configure>", lambda e: canvas.itemconfigure(frm_id, width=e.width))
+    root.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(
+        -1 if e.delta > 0 else 1, "units") if frm.winfo_reqheight() > canvas.winfo_height() else None)
 
     vars_ = {
         "use_dokuwiki": tk.BooleanVar(value=local["use_dokuwiki"]),
         "use_markdown": tk.BooleanVar(value=local["use_markdown"]),
         "markdown_dir": tk.StringVar(value=local["markdown_dir"]),
-        "pages_dir": tk.StringVar(value=local["pages_dir"]),
-        "books_subdir": tk.StringVar(value=local["books_subdir"]),
+        "books_dir": tk.StringVar(value=local["books_dir"]),
         "media_dir": tk.StringVar(value=local["media_dir"]),
         "pandoc": tk.StringVar(value=local["pandoc"] or config.find_pandoc()),
         "title": tk.StringVar(value=site["title"]),
@@ -58,13 +69,14 @@ def main():
     def field(label, key, browse=None, hint=None):
         nonlocal row
         ttk.Label(frm, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8))
-        ttk.Entry(frm, textvariable=vars_[key], width=52).grid(row=row, column=1, pady=2)
+        ttk.Entry(frm, textvariable=vars_[key], width=52).grid(
+            row=row, column=1, pady=2, sticky="ew")
         if browse:
             ttk.Button(frm, text="찾아보기", command=browse).grid(row=row, column=2, padx=(6, 0))
         row += 1
         if hint:
-            ttk.Label(frm, text=hint, foreground="#666").grid(
-                row=row, column=1, sticky="w", pady=(0, 4))
+            ttk.Label(frm, text=hint, foreground="#666", justify="left",
+                      wraplength=420).grid(row=row, column=1, sticky="w", pady=(0, 4))
             row += 1
 
     def pick_dir(key):
@@ -97,12 +109,12 @@ def main():
           "이 폴더 안의 하위 폴더 하나 = 책 하나 (그 안의 폴더 = 장, .md = 글)")
 
     section("도쿠위키 소스")
-    field("도쿠위키 pages 폴더", "pages_dir", pick_dir("pages_dir"),
-          "예: …\\dokuwiki\\data\\pages")
-    field("책 폴더 이름", "books_subdir", None,
-          "pages 폴더 안에서 .txt 파일 하나 = 책 하나인 폴더")
+    field("책 폴더", "books_dir", pick_dir("books_dir"),
+          "책 .txt 파일이 들어 있는 도쿠위키 폴더 (.txt 하나 = 책 하나).\n"
+          "예: C:\\DokuWiki\\data\\pages\\내책들\n"
+          "'pages' 폴더는 이 경로에서 자동으로 찾습니다.")
     field("미디어 폴더 (선택)", "media_dir", pick_dir("media_dir"),
-          "비워두면 pages 옆의 media 폴더를 자동 사용")
+          "비워두면 pages 폴더 옆의 media 폴더를 자동으로 씁니다.")
     field("pandoc 경로", "pandoc", pick_file("pandoc"),
           "비워두면 PATH에서 자동 검색")
 
@@ -113,10 +125,17 @@ def main():
     field("언어 코드", "lang", None, "예: ko-KR, en-US")
 
     section("댓글 (giscus, 선택)")
-    field("저장소", "g_repo", None, "예: 아이디/아이디.github.io — 비워두면 댓글창 없음")
-    field("repo ID", "g_repoId", None, "giscus.app 에서 발급되는 값")
-    field("카테고리", "g_category")
-    field("카테고리 ID", "g_categoryId")
+    field("저장소", "g_repo", None,
+          "댓글이 저장될 GitHub 저장소를 '내GitHub아이디/저장소이름' 형태로 씁니다.\n"
+          "예: iamtalker/iamtalker.github.io  (공개 저장소여야 하고, 저장소 Settings에서\n"
+          "Discussions를 켜고 giscus 앱을 설치해야 합니다.) 비워두면 댓글창이 없습니다.")
+    field("repo ID", "g_repoId", None,
+          "https://giscus.app 에서 위 저장소를 입력하면 아래쪽에 나오는\n"
+          "data-repo-id 값을 복사해 붙여넣으세요. (R_ 로 시작)")
+    field("카테고리", "g_category", None,
+          "댓글이 모일 Discussions 카테고리 이름. 보통 Announcements")
+    field("카테고리 ID", "g_categoryId", None,
+          "giscus.app 에서 카테고리를 고르면 나오는 data-category-id 값 (DIC_ 로 시작)")
 
     section("GitHub 업로드")
 
@@ -145,7 +164,11 @@ def main():
                 "(로그인은 첫 업로드 때 git이 브라우저로 물어봅니다.)\n\n" + r.stderr.strip())
 
     field("저장소 주소", "git_remote", check_remote,
-          "예: https://github.com/아이디/아이디.github.io.git  (오른쪽 버튼 = 연결 확인)")
+          "GitHub에서 만든 저장소 페이지의 초록색 'Code' 버튼 → HTTPS 탭에 나오는 주소를\n"
+          "그대로 복사해 붙여넣으세요. 형태: https://github.com/내GitHub아이디/저장소이름.git\n"
+          "예: https://github.com/iamtalker/iamtalker.github.io.git\n"
+          "(저장소 이름을 '내GitHub아이디.github.io'로 만들면 사이트 주소가\n"
+          "https://내GitHub아이디.github.io 가 됩니다. 오른쪽 버튼 = 연결 확인)")
     field("브랜치", "git_branch", None, "GitHub Pages가 배포에 쓰는 브랜치 (보통 main)")
     field("커밋 메시지", "commit_message")
     ttk.Label(frm, text="로그인 정보(비밀번호/토큰)는 이 프로그램이 저장하지 않고 git 이 관리합니다.",
@@ -158,8 +181,7 @@ def main():
     row += 1
 
     def save():
-        pages = vars_["pages_dir"].get().strip()
-        books = vars_["books_subdir"].get().strip()
+        books = vars_["books_dir"].get().strip()
         md_dir = vars_["markdown_dir"].get().strip()
         use_doku = bool(vars_["use_dokuwiki"].get())
         use_md = bool(vars_["use_markdown"].get())
@@ -171,17 +193,14 @@ def main():
             return
         pandoc = vars_["pandoc"].get().strip()
         if use_doku:
-            if not pages or not os.path.isdir(pages):
-                messagebox.showerror("설정", "도쿠위키 pages 폴더를 찾을 수 없습니다.")
-                return
             if not books:
-                messagebox.showerror("설정", "책 폴더 이름을 입력하세요.")
+                messagebox.showerror("설정", "책 폴더를 입력하세요.")
                 return
-            if not os.path.isdir(os.path.join(pages, books)):
+            if not os.path.isdir(books):
                 if not messagebox.askyesno(
-                        "설정", "pages 안에 '%s' 폴더가 아직 없습니다.\n새로 만들까요?" % books):
+                        "설정", "'%s' 폴더가 아직 없습니다.\n새로 만들까요?" % books):
                     return
-                os.makedirs(os.path.join(pages, books), exist_ok=True)
+                os.makedirs(books, exist_ok=True)
             if not config.find_pandoc(pandoc):
                 messagebox.showwarning(
                     "설정", "pandoc을 찾을 수 없습니다. 설치 후 경로를 지정해야 빌드됩니다.")
@@ -189,8 +208,7 @@ def main():
             "use_dokuwiki": use_doku,
             "use_markdown": use_md,
             "markdown_dir": os.path.normpath(md_dir) if md_dir else "",
-            "pages_dir": os.path.normpath(pages) if pages else "",
-            "books_subdir": books,
+            "books_dir": os.path.normpath(books) if books else "",
             "media_dir": vars_["media_dir"].get().strip(),
             "pandoc": pandoc,
             "auto_push": bool(vars_["auto_push"].get()),
@@ -213,10 +231,15 @@ def main():
         messagebox.showinfo("설정", "저장했습니다.")
         root.destroy()
 
-    btns = ttk.Frame(frm)
-    btns.grid(row=row, column=0, columnspan=3, sticky="e", pady=(14, 0))
+    btns = ttk.Frame(root, padding=(16, 8))
+    btns.grid(row=1, column=0, columnspan=2, sticky="e")
     ttk.Button(btns, text="취소", command=root.destroy).grid(row=0, column=0, padx=6)
     ttk.Button(btns, text="저장", command=save).grid(row=0, column=1)
+
+    root.update_idletasks()
+    canvas.configure(
+        width=frm.winfo_reqwidth(),
+        height=min(frm.winfo_reqheight(), int(root.winfo_screenheight() * 0.8)))
 
     root.mainloop()
 

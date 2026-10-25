@@ -20,9 +20,8 @@ DEFAULT_LOCAL = {
     "use_dokuwiki": True,     # source 1: DokuWiki book files -> markdown
     "use_markdown": False,    # source 2: markdown folders -> markdown
     "markdown_dir": "",       # folder whose sub-folders are books (see markdown_source.py)
-    "pages_dir": "",          # .../dokuwiki/data/pages
-    "books_subdir": "github_io_books",  # folder inside pages_dir holding one .txt per book
-    "media_dir": "",          # blank = sibling "media" folder next to pages_dir
+    "books_dir": "",          # folder holding one .txt per book, inside .../dokuwiki/data/pages
+    "media_dir": "",          # blank = sibling "media" folder next to the "pages" folder
     "pandoc": "",             # blank = look for "pandoc" on PATH
     "auto_push": True,        # update.bat: git commit + push after building
     "git_remote": "",         # e.g. https://github.com/<id>/<id>.github.io.git
@@ -55,7 +54,13 @@ def _save(path, data):
 
 
 def load_local():
-    return _load(CONFIG_PATH, DEFAULT_LOCAL)
+    data = _load(CONFIG_PATH, DEFAULT_LOCAL)
+    # older config.json kept the pages folder and the book sub-folder apart
+    old_pages = data.pop("pages_dir", "")
+    old_sub = data.pop("books_subdir", "")
+    if not data["books_dir"] and old_pages:
+        data["books_dir"] = os.path.normpath(os.path.join(old_pages, old_sub))
+    return data
 
 
 def load_site():
@@ -76,13 +81,27 @@ def find_pandoc(configured=""):
     return shutil.which("pandoc") or ""
 
 
+def find_pages_root(books_dir):
+    """The DokuWiki "pages" folder that contains books_dir: the nearest
+    ancestor called "pages", else the parent of books_dir."""
+    cur = os.path.normpath(books_dir)
+    while True:
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return os.path.dirname(os.path.normpath(books_dir))
+        if os.path.basename(cur).lower() == "pages":
+            return cur
+        cur = parent
+
+
 def resolved_paths(local=None):
     """Absolute paths the build uses, derived from config.json."""
     local = local or load_local()
-    pages = local["pages_dir"]
+    books = local["books_dir"]
+    pages = find_pages_root(books) if books else ""
     return {
         "pages_dir": pages,
-        "books_src_dir": os.path.join(pages, local["books_subdir"]),
+        "books_src_dir": books,
         "media_dir": local["media_dir"] or os.path.join(os.path.dirname(pages), "media"),
         "pandoc": find_pandoc(local["pandoc"]),
     }
@@ -98,9 +117,7 @@ def require_ready():
     if not (local["use_dokuwiki"] or local["use_markdown"]):
         problems.append("No source is enabled.")
     if local["use_dokuwiki"]:
-        if not os.path.isdir(paths["pages_dir"]):
-            problems.append("DokuWiki pages folder not found: %r" % paths["pages_dir"])
-        elif not os.path.isdir(paths["books_src_dir"]):
+        if not os.path.isdir(paths["books_src_dir"]):
             problems.append("Books folder not found: %r" % paths["books_src_dir"])
         if not paths["pandoc"]:
             problems.append("pandoc not found (install it, or set its path in settings.bat)")
