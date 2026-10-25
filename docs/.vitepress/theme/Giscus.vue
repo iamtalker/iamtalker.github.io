@@ -11,7 +11,8 @@ const el = ref(null)
 // comments are configured in site.json ("giscus"), written by the settings
 // window. Left blank, no comment box is shown at all.
 const G = site.giscus || {}
-const REPO = G.repo
+// giscus wants "owner/name"; tolerate a pasted clone URL ("https://github.com/owner/name.git")
+const REPO = (G.repo || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '')
 const REPO_ID = G.repoId
 const CATEGORY = G.category || 'Announcements'
 const CATEGORY_ID = G.categoryId

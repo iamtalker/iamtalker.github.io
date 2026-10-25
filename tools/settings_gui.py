@@ -5,6 +5,7 @@ Saves config.json (this PC's paths) and site.json (site title etc.).
 Run it with settings.bat; update.bat opens it automatically on first use.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -125,8 +126,9 @@ def main():
     field("언어 코드", "lang", None, "예: ko-KR, en-US")
 
     section("댓글 (giscus, 선택)")
-    field("저장소", "g_repo", None,
+    field("댓글 저장소", "g_repo", None,
           "댓글이 저장될 GitHub 저장소를 '내GitHub아이디/저장소이름' 형태로 씁니다.\n"
+          "(업로드용 '저장소 주소'와 달리 https://github.com/ 와 .git 은 붙이지 않습니다.)\n"
           "예: iamtalker/iamtalker.github.io  (공개 저장소여야 하고, 저장소 Settings에서\n"
           "Discussions를 켜고 giscus 앱을 설치해야 합니다.) 비워두면 댓글창이 없습니다.")
     field("repo ID", "g_repoId", None,
@@ -222,7 +224,8 @@ def main():
             "description": vars_["description"].get().strip(),
             "lang": vars_["lang"].get().strip() or config.DEFAULT_SITE["lang"],
             "giscus": {
-                "repo": vars_["g_repo"].get().strip(),
+                "repo": re.sub(r"(^https?://github\.com/|\.git$|/$)", "",
+                               vars_["g_repo"].get().strip()),
                 "repoId": vars_["g_repoId"].get().strip(),
                 "category": vars_["g_category"].get().strip() or "Announcements",
                 "categoryId": vars_["g_categoryId"].get().strip(),
