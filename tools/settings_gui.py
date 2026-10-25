@@ -10,10 +10,16 @@ import shutil
 import subprocess
 import sys
 import tkinter as tk
+import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config  # noqa: E402
+
+
+def clean_repo(text):
+    """'owner/name' from a pasted repo, clone URL or browser URL."""
+    return re.sub(r"(^https?://github\.com/|\.git$|/$)", "", text.strip())
 
 
 def main():
@@ -126,6 +132,79 @@ def main():
     field("언어 코드", "lang", None, "예: ko-KR, en-US")
 
     section("댓글 (giscus, 선택)")
+
+    def repo_from_remote():
+        m = re.match(r"https?://github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?/?$",
+                     vars_["git_remote"].get().strip())
+        return m.group(1) if m else ""
+
+    def open_url(url):
+        return lambda: webbrowser.open(url)
+
+    def open_repo_page(suffix):
+        def run():
+            repo = clean_repo(vars_["g_repo"].get()) or repo_from_remote()
+            if not repo:
+                messagebox.showerror("댓글", "먼저 아래 '댓글 저장소' 칸에 아이디/저장소이름을 쓰세요.\n"
+                                     "(GitHub 업로드의 저장소 주소를 먼저 넣었다면 자동으로 채워 줍니다.)")
+                return
+            webbrowser.open("https://github.com/%s%s" % (repo, suffix))
+        return run
+
+    ttk.Label(frm, text="① GitHub에서 아래 두 가지를 한 번만 해 두세요", foreground="#666").grid(
+        row=row, column=1, sticky="w")
+    row += 1
+    steps = ttk.Frame(frm)
+    steps.grid(row=row, column=1, sticky="w", pady=(2, 6))
+    ttk.Button(steps, text="giscus 앱 설치 페이지 열기",
+               command=open_url("https://github.com/apps/giscus")).grid(row=0, column=0, padx=(0, 6))
+    ttk.Button(steps, text="Discussions 켜는 페이지 열기",
+               command=open_repo_page("/settings#features")).grid(row=0, column=1)
+    row += 1
+    ttk.Label(frm, text="   설치 화면에서 'Only select repositories'를 고르고 내 사이트 저장소를 선택하세요.\n"
+                        "   Discussions 화면에서는 Features 항목의 Discussions 체크를 켭니다.",
+              foreground="#666", justify="left").grid(row=row, column=1, sticky="w", pady=(0, 6))
+    row += 1
+
+    example = repo_from_remote() or "iamtalker/iamtalker.github.io"
+    ttk.Label(frm, text="② giscus.app 에서 코드를 만들어 아래에 통째로 붙여넣고 [값 자동 입력]을 누르세요\n"
+                        "   giscus.app 의 '저장소' 칸에는 이렇게 쓰세요:  %s\n"
+                        "   (https://github.com/ 나 .git 을 붙이지 않고, 아이디/저장소이름 만 씁니다)" % example,
+              foreground="#666", justify="left").grid(row=row, column=1, sticky="w")
+    row += 1
+    paste = tk.Text(frm, height=4, width=52)
+    paste.grid(row=row, column=1, sticky="ew", pady=2)
+    row += 1
+
+    def fill_from_paste():
+        text = paste.get("1.0", "end")
+        found = {}
+        for attr in ("repo", "repo-id", "category", "category-id"):
+            m = re.search(r'data-%s\s*=\s*"([^"]*)"' % attr, text)
+            if m:
+                found[attr] = m.group(1).strip()
+        if "repo-id" not in found or "category-id" not in found:
+            messagebox.showwarning(
+                "댓글", "붙여넣은 내용에서 data-repo-id / data-category-id 를 찾지 못했습니다.\n"
+                "giscus.app 맨 아래 '<script src=\"https://giscus.app/client.js\" …' 코드 전체를 복사해 주세요.")
+            return
+        if "repo" in found:
+            vars_["g_repo"].set(clean_repo(found["repo"]))
+        elif not vars_["g_repo"].get().strip():
+            vars_["g_repo"].set(repo_from_remote())
+        vars_["g_repoId"].set(found["repo-id"])
+        vars_["g_categoryId"].set(found["category-id"])
+        if "category" in found:
+            vars_["g_category"].set(found["category"])
+        messagebox.showinfo("댓글", "repo ID와 카테고리 ID를 채웠습니다.")
+
+    bar = ttk.Frame(frm)
+    bar.grid(row=row, column=1, sticky="w", pady=(0, 6))
+    ttk.Button(bar, text="giscus.app 열기",
+               command=open_url("https://giscus.app/ko")).grid(row=0, column=0, padx=(0, 6))
+    ttk.Button(bar, text="값 자동 입력", command=fill_from_paste).grid(row=0, column=1)
+    row += 1
+
     field("댓글 저장소", "g_repo", None,
           "댓글이 저장될 GitHub 저장소를 '내GitHub아이디/저장소이름' 형태로 씁니다.\n"
           "(업로드용 '저장소 주소'와 달리 https://github.com/ 와 .git 은 붙이지 않습니다.)\n"
@@ -146,8 +225,17 @@ def main():
         if not url:
             messagebox.showerror("연결 확인", "저장소 주소를 입력하세요.")
             return
+        if not re.match(r"https?://github\.com/[^/\s]+/[^/\s]+$", url):
+            hint = ""
+            if re.match(r"^[^/\s:]+/[^/\s:]+$", url):
+                hint = "\n'아이디/저장소이름'만 쓰셨네요. 앞에 https://github.com/ 를 붙여\n" \
+                       "https://github.com/%s.git 형태로 쓰세요." % re.sub(r"\.git$", "", url)
+            messagebox.showerror(
+                "연결 확인",
+                "주소 형태가 올바르지 않습니다.\n정확한 형태: https://github.com/아이디/저장소이름.git" + hint)
+            return
         if not shutil.which("git"):
-            messagebox.showerror("연결 확인", "git이 설치되어 있지 않습니다.")
+            messagebox.showerror("연결 확인", "git이 설치되어 있지 않습니다. https://git-scm.com 에서 설치하세요.")
             return
         env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
         try:
@@ -157,13 +245,37 @@ def main():
         except subprocess.TimeoutExpired:
             messagebox.showerror("연결 확인", "30초 안에 응답이 없습니다.")
             return
-        if r.returncode == 0:
-            messagebox.showinfo("연결 확인", "저장소에 접근할 수 있습니다.")
-        else:
+        if r.returncode != 0:
+            err = r.stderr.strip()
+            low = err.lower()
+            if "could not resolve host" in low or "unable to access" in low and "resolve" in low:
+                why = "인터넷에 연결되어 있지 않거나 주소의 도메인이 틀렸습니다."
+            elif "not found" in low or "repository" in low and "exist" in low:
+                why = ("GitHub에 이 저장소가 없습니다. 아이디나 저장소 이름의 철자를 확인하거나,\n"
+                       "저장소를 아직 만들지 않았다면 먼저 만드세요. 비공개 저장소라면 아직 로그인 전일 수도 있습니다.")
+            elif "authentication" in low or "terminal prompts disabled" in low or "403" in low:
+                why = ("로그인이 필요한 저장소입니다. 첫 업로드 때 git이 브라우저로 로그인을 물어보니\n"
+                       "그때 로그인하면 됩니다. (주소는 맞을 가능성이 높습니다.)")
+            else:
+                why = "주소가 틀렸거나 로그인이 필요할 수 있습니다."
+            messagebox.showwarning("연결 확인", "접근하지 못했습니다.\n\n" + why + "\n\n(git 메시지)\n" + err)
+            return
+
+        heads = [ln.split("refs/heads/")[-1] for ln in r.stdout.splitlines() if "refs/heads/" in ln]
+        branch = vars_["git_branch"].get().strip() or "main"
+        if not heads:
+            messagebox.showinfo("연결 확인", "저장소에 접근할 수 있습니다.\n비어 있는 저장소라 바로 업로드할 수 있습니다.")
+        elif branch not in heads:
             messagebox.showwarning(
                 "연결 확인",
-                "접근하지 못했습니다. 주소가 틀렸거나, 비공개 저장소라 아직 로그인 전일 수 있습니다.\n"
-                "(로그인은 첫 업로드 때 git이 브라우저로 물어봅니다.)\n\n" + r.stderr.strip())
+                "저장소에 접근할 수 있습니다.\n하지만 '%s' 브랜치가 없고 '%s' 브랜치가 있습니다.\n"
+                "아래 '브랜치' 칸을 '%s'로 바꾸거나, GitHub Pages가 쓰는 브랜치를 확인하세요."
+                % (branch, ", ".join(heads), heads[0]))
+        else:
+            messagebox.showinfo(
+                "연결 확인",
+                "저장소에 접근할 수 있습니다.\n이미 올라간 내용이 있습니다. 처음 업로드할 때 거절되면\n"
+                "update.bat이 기존 내용을 지우고 덮어쓸지 물어봅니다.")
 
     field("저장소 주소", "git_remote", check_remote,
           "GitHub에서 만든 저장소 페이지의 초록색 'Code' 버튼 → HTTPS 탭에 나오는 주소를\n"
@@ -224,8 +336,7 @@ def main():
             "description": vars_["description"].get().strip(),
             "lang": vars_["lang"].get().strip() or config.DEFAULT_SITE["lang"],
             "giscus": {
-                "repo": re.sub(r"(^https?://github\.com/|\.git$|/$)", "",
-                               vars_["g_repo"].get().strip()),
+                "repo": clean_repo(vars_["g_repo"].get()),
                 "repoId": vars_["g_repoId"].get().strip(),
                 "category": vars_["g_category"].get().strip() or "Announcements",
                 "categoryId": vars_["g_categoryId"].get().strip(),
