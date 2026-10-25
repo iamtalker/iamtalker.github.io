@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tkinter as tk
+import tkinter.font as tkfont
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
@@ -67,6 +68,35 @@ def main():
 
     row = 0
 
+    bg = ttk.Style().lookup("TFrame", "background") or root.cget("bg")
+    note_font = tkfont.nametofont("TkDefaultFont")
+
+    def note(text, pady=(0, 4)):
+        """Help text in a read-only Text so it can be selected and copied."""
+        nonlocal row
+        t = tk.Text(frm, height=1, width=52, wrap="word", relief="flat", borderwidth=0,
+                    highlightthickness=0, background=bg, foreground="#666",
+                    font=note_font, cursor="xterm")
+        t.insert("1.0", text)
+
+        def fit(_e=None):
+            n = t.count("1.0", "end-1c", "displaylines")
+            t.configure(height=max(1, n[0] if n else 1))
+
+        def block(e):
+            # keep selection and Ctrl+C / Ctrl+A, refuse any editing
+            if (e.state & 0x4) and e.keysym.lower() in ("c", "a"):
+                return None
+            if e.keysym in ("Left", "Right", "Up", "Down", "Home", "End", "Prior", "Next"):
+                return None
+            return "break"
+
+        t.bind("<Key>", block)
+        t.bind("<Configure>", fit)
+        t.bind("<Button-1>", lambda e: t.focus_set())
+        t.grid(row=row, column=1, sticky="ew", pady=pady)
+        row += 1
+
     def section(text):
         nonlocal row
         ttk.Label(frm, text=text, font=("", 10, "bold")).grid(
@@ -82,9 +112,7 @@ def main():
             ttk.Button(frm, text="찾아보기", command=browse).grid(row=row, column=2, padx=(6, 0))
         row += 1
         if hint:
-            ttk.Label(frm, text=hint, foreground="#666", justify="left",
-                      wraplength=420).grid(row=row, column=1, sticky="w", pady=(0, 4))
-            row += 1
+            note(hint)
 
     def pick_dir(key):
         def run():
@@ -151,9 +179,7 @@ def main():
             webbrowser.open("https://github.com/%s%s" % (repo, suffix))
         return run
 
-    ttk.Label(frm, text="① GitHub에서 아래 두 가지를 한 번만 해 두세요", foreground="#666").grid(
-        row=row, column=1, sticky="w")
-    row += 1
+    note("① GitHub에서 아래 두 가지를 한 번만 해 두세요", pady=0)
     steps = ttk.Frame(frm)
     steps.grid(row=row, column=1, sticky="w", pady=(2, 6))
     ttk.Button(steps, text="giscus 앱 설치 페이지 열기",
@@ -161,17 +187,13 @@ def main():
     ttk.Button(steps, text="Discussions 켜는 페이지 열기",
                command=open_repo_page("/settings#features")).grid(row=0, column=1)
     row += 1
-    ttk.Label(frm, text="   설치 화면에서 'Only select repositories'를 고르고 내 사이트 저장소를 선택하세요.\n"
-                        "   Discussions 화면에서는 Features 항목의 Discussions 체크를 켭니다.",
-              foreground="#666", justify="left").grid(row=row, column=1, sticky="w", pady=(0, 6))
-    row += 1
+    note("설치 화면에서 'Only select repositories'를 고르고 내 사이트 저장소를 선택하세요.\n"
+         "Discussions 화면에서는 Features 항목의 Discussions 체크를 켭니다.", pady=(0, 6))
 
     example = repo_from_remote() or "iamtalker/iamtalker.github.io"
-    ttk.Label(frm, text="② giscus.app 에서 코드를 만들어 아래에 통째로 붙여넣고 [값 자동 입력]을 누르세요\n"
-                        "   giscus.app 의 '저장소' 칸에는 이렇게 쓰세요:  %s\n"
-                        "   (https://github.com/ 나 .git 을 붙이지 않고, 아이디/저장소이름 만 씁니다)" % example,
-              foreground="#666", justify="left").grid(row=row, column=1, sticky="w")
-    row += 1
+    note("② giscus.app 에서 코드를 만들어 아래에 통째로 붙여넣고 [값 자동 입력]을 누르세요\n"
+         "giscus.app 의 '저장소' 칸에는 이렇게 쓰세요:  %s\n"
+         "(https://github.com/ 나 .git 을 붙이지 않고, 아이디/저장소이름 만 씁니다)" % example, pady=0)
     paste = tk.Text(frm, height=4, width=52)
     paste.grid(row=row, column=1, sticky="ew", pady=2)
     row += 1
@@ -285,9 +307,7 @@ def main():
           "https://내GitHub아이디.github.io 가 됩니다. 오른쪽 버튼 = 연결 확인)")
     field("브랜치", "git_branch", None, "GitHub Pages가 배포에 쓰는 브랜치 (보통 main)")
     field("커밋 메시지", "commit_message")
-    ttk.Label(frm, text="로그인 정보(비밀번호/토큰)는 이 프로그램이 저장하지 않고 git 이 관리합니다.",
-              foreground="#666").grid(row=row, column=1, sticky="w", pady=(0, 4))
-    row += 1
+    note("로그인 정보(비밀번호/토큰)는 이 프로그램이 저장하지 않고 git 이 관리합니다.")
     ttk.Checkbutton(
         frm, text="빌드 후 GitHub 에 자동 업로드 (update.bat)",
         variable=vars_["auto_push"],

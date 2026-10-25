@@ -506,9 +506,11 @@ def write_book_index(out_docs, book_slug, sidebar):
     # a leaf domain always has "link" (its one page), whether or not it
     # also carries "items" for its own internal heading sub-tree now -
     # only a true container domain (own folder, no single page) lacks it.
-    lines = ['<li><a href="/%s/%s">%s</a></li>' % (book_slug, d["text"], d["text"])
+    # link by the on-disk name (slugify_path), not the display title: a title
+    # like "3. 준비: 자세와 환경" lives in a folder called "3. 준비- 자세와 환경".
+    lines = ['<li><a href="%s">%s</a></li>' % (d["link"], d["text"])
              if "link" in d else
-             '<li><a href="/%s/%s/">%s</a></li>' % (book_slug, d["text"], d["text"])
+             '<li><a href="/%s/%s/">%s</a></li>' % (book_slug, slugify_path(d["text"]), d["text"])
              for d in sidebar]
     home = """---
 layout: home
