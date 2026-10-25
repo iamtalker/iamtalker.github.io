@@ -6,6 +6,7 @@ so a fresh copy of this folder only needs the repository URL filled in.
 Login is left to git itself (Git Credential Manager opens a browser the
 first time); no password or token is ever stored by this tool.
 """
+import json
 import os
 import shutil
 import subprocess
@@ -67,9 +68,63 @@ def main():
 
     r = git("push", "-u", "origin", "HEAD:%s" % branch, capture=False)
     if r.returncode != 0:
+        if remote_has_other_content(branch):
+            merge_existing_remote(branch)
         fail("git push failed - see the message above. (Is the repository URL "
              "right, and are you logged in to GitHub?)")
     print("Pushed to %s (%s)." % (url or "origin", branch))
+
+
+def book_slugs(text):
+    try:
+        return [b["slug"] for b in json.loads(text)]
+    except (ValueError, KeyError, TypeError):
+        return []
+
+
+def remote_has_other_content(branch):
+    """True when GitHub already holds commits we don't have (e.g. books
+    published earlier from another folder), which is why the push bounced."""
+    if git("fetch", "origin", branch).returncode != 0:
+        return False
+    ref = "origin/%s" % branch
+    return git("merge-base", "--is-ancestor", ref, "HEAD").returncode != 0
+
+
+def merge_existing_remote(branch):
+    ref = "origin/%s" % branch
+    remote_books = book_slugs(git("show", "%s:books.json" % ref).stdout)
+    try:
+        with open(os.path.join(ROOT, "books.json"), encoding="utf-8") as f:
+            local_books = book_slugs(f.read())
+    except OSError:
+        local_books = []
+    only_remote = [b for b in remote_books if b not in local_books]
+
+    print()
+    print("GitHub already has content that this folder doesn't:")
+    for b in only_remote or ["(no extra books, other files only)"]:
+        print("  -", b)
+    print("Merge it in and keep it? (this folder's files win on conflicts)")
+    if input("[y/N] ").strip().lower() != "y":
+        fail("Not merged. Nothing was uploaded.")
+
+    r = git("merge", ref, "--allow-unrelated-histories", "-X", "ours",
+            "-m", "Merge existing GitHub content")
+    if r.returncode != 0:
+        git("merge", "--abort")
+        fail("Merge failed, nothing changed:\n" + r.stdout + r.stderr)
+
+    print("Merged. A book is only kept on the next build if its source is in "
+          "the settings.")
+    if only_remote:
+        print("Add the source of these books in settings.bat, then run "
+              "update.bat again to build and upload everything:")
+        for b in only_remote:
+            print("  -", b)
+    else:
+        print("Run update.bat again to upload.")
+    sys.exit(1)
 
 
 if __name__ == "__main__":
