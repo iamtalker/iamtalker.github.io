@@ -4,3 +4,5 @@ docs/.vitepress/cache/
 *.log
 __pycache__/
 config.json
+
+.settings_backup/

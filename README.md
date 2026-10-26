@@ -21,8 +21,12 @@ GitHub Pages에 올리는 도구. 사이트 구조는 **서재 → 책 → 대�
 창 안의 로그에 나온다. 1~2분 뒤 사이트에 반영된다.
 (처음 push 때 git 이 브라우저로 GitHub 로그인을 물어본다. 비밀번호/토큰은 이 도구가 저장하지 않는다.)
 
-창의 다른 버튼: **[설정]**(전체 설정 창, 안에서 마법사를 다시 열 수도 있다), **[내 사이트 열기]**,
-**[올라가는 중인지 보기]**(GitHub Actions 진행 화면).
+창의 다른 버튼: **[설정]**(전체 설정 창, 안에서 마법사를 다시 열 수도 있다), **[설정 초기화]**,
+**[내 사이트 열기]**, **[올라가는 중인지 보기]**(GitHub Actions 진행 화면).
+
+**[설정 초기화]** 는 이 컴퓨터 설정(`config.json`)과 사이트 정보(`site.json`)를 처음 상태로 되돌리고
+마법사를 다시 연다. 지우기 전에 현재 설정을 `.settings_backup/날짜_시각/` 에 복사해 두므로, 되돌리려면
+그 안의 파일을 폴더 맨 위로 복사하면 된다. 올려 둔 사이트와 글 원본은 건드리지 않는다.
 
 ### 이미 책이 올라가 있는 저장소에 올릴 때
 
@@ -75,8 +79,26 @@ GitHub Pages에 올리는 도구. 사이트 구조는 **서재 → 책 → 대�
 - `tools/remote_check.py` — GitHub 저장소 주소 검사("연결 확인").
 - `tools/build_books.py` — 핵심 변환기. `tools/markdown_source.py` — 마크다운 폴더를 변환기 입력으로 바꾸는 어댑터.
 - `tools/build_library.py` — 서재 첫 페이지(`docs/index.md`) 생성. `tools/publish.py` — commit + push.
+- `tools/make_release.py` — 책·개인 설정을 뺀 도구 사본을 배포용 저장소에 올린다.
 - `docs/.vitepress/config.mjs` — `site.json`/`books.json`/`sidebar.json`으로 nav·사이드바 구성.
 - `.github/workflows/deploy.yml` — `main`에 push되면 빌드 후 Pages 배포.
+
+## 도구만 따로 배포하기
+
+이 폴더는 "내 사이트 + 도구"가 함께 있다. 다른 사람에게 줄 도구만(내 책·설정 없이) 별도 저장소에 올리려면:
+
+```
+py tools/make_release.py                  # 무엇이 바뀌는지만 보기
+py tools/make_release.py --push           # 배포용 저장소에 commit + push
+py tools/make_release.py --push --tag v0.2.0   # GitHub 릴리즈까지
+```
+
+- 배포용 저장소 기본값은 `<내 아이디>/githubio_book` (`--repo 아이디/이름`으로 바꿀 수 있다).
+- 작업 폴더에서 **먼저 commit** 해야 한다. 마지막 커밋(`HEAD`)에서 책(`docs/`의 책 폴더, `public/`),
+  `books.json`, `sidebar.json`, `site.json`을 비운 사본을 만들기 때문에, 커밋 안 된 수정이나
+  `config.json` 은 절대 섞여 들어가지 않는다.
+- 사본에 내 아이디, 내 컴퓨터 경로, 내 책 이름이 남아 있으면 중단한다.
+- 코드는 이 폴더에서만 고친다. 배포용 저장소는 이 스크립트가 만드는 결과물이다.
 
 ## 의존성
 

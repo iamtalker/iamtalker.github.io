@@ -12,9 +12,11 @@ import json
 import os
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 import tkinter.font as tkfont
 import webbrowser
@@ -83,6 +85,8 @@ def main():
     upload_btn.pack(side="left")
     settings_btn = ttk.Button(btns, text="설정")
     settings_btn.pack(side="left", padx=(8, 0))
+    reset_btn = ttk.Button(btns, text="설정 초기화")
+    reset_btn.pack(side="left", padx=(8, 0))
     site_btn = ttk.Button(btns, text="내 사이트 열기")
     site_btn.pack(side="right")
     actions_btn = ttk.Button(btns, text="올라가는 중인지 보기")
@@ -121,7 +125,7 @@ def main():
 
     def set_busy(busy):
         state["busy"] = busy
-        for b in (upload_btn, settings_btn):
+        for b in (upload_btn, settings_btn, reset_btn):
             b.state(["disabled"] if busy else ["!disabled"])
 
     def pipeline(local):
@@ -156,6 +160,8 @@ def main():
                 kind, val = q.get_nowait()
                 if kind == "log":
                     put(val)
+                elif kind == "settings_done":
+                    after_settings()
                 elif kind == "ask":
                     ans = messagebox.askyesno("확인", val, icon="warning")
                     p = state["proc"]
@@ -201,13 +207,38 @@ def main():
 
         def run():
             run_settings()
-            q.put(("log", ""))
-            root.after(0, after_settings)
+            q.put(("settings_done", None))   # the UI is only touched from poll()
         threading.Thread(target=run, daemon=True).start()
 
     def after_settings():
         refresh()
         set_busy(False)
+
+    def reset_settings():
+        if state["busy"]:
+            return
+        if not messagebox.askyesno(
+                "설정 초기화",
+                "설정을 처음 상태로 되돌립니다.\n\n"
+                "• 이 컴퓨터 설정: 글 폴더, GitHub 저장소 주소, pandoc 경로\n"
+                "• 사이트 정보: 제목, 소개, 댓글 설정\n\n"
+                "올려 둔 사이트와 내 글 원본은 그대로입니다. 단, 다음에 [사이트에 올리기]를 하면\n"
+                "초기화된 사이트 정보(제목 등)로 올라갑니다.\n"
+                "지금 설정은 .settings_backup 폴더에 백업해 둡니다.\n\n계속할까요?",
+                icon="warning"):
+            return
+        backup = os.path.join(ROOT, ".settings_backup", time.strftime("%Y%m%d_%H%M%S"))
+        os.makedirs(backup, exist_ok=True)
+        for path in (config.CONFIG_PATH, config.SITE_PATH):
+            if os.path.exists(path):
+                shutil.copy2(path, backup)
+        if os.path.exists(config.CONFIG_PATH):
+            os.remove(config.CONFIG_PATH)
+        config.save_site(config.DEFAULT_SITE)
+        log.delete("1.0", "end")
+        put("설정을 초기화했습니다. (백업: %s)\n처음 설정 마법사가 열립니다.\n" % backup)
+        status.configure(text="설정 초기화됨", foreground="#444")
+        open_settings()   # config.json is gone, so this opens the wizard
 
     def open_site():
         url, _ = site_urls(config.load_local()["git_remote"])
@@ -221,6 +252,7 @@ def main():
 
     upload_btn.configure(command=start_upload)
     settings_btn.configure(command=open_settings)
+    reset_btn.configure(command=reset_settings)
     site_btn.configure(command=open_site)
     actions_btn.configure(command=open_actions)
 
