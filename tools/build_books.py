@@ -864,9 +864,11 @@ def collect_sources():
 def main():
     os.makedirs(OUT_DOCS, exist_ok=True)
     sources = collect_sources()
-    if not sources:
+    allow_empty = "--allow-empty" in sys.argv
+    if not sources and not allow_empty:
         # stop with an error: carrying on would publish the OLD site again
-        # and report success
+        # and report success. Exit code 3 = "no books" (the app window then asks
+        # whether to publish an empty site and runs this again with --allow-empty).
         print("책을 하나도 찾지 못했습니다. 아무것도 바꾸지 않았고, 올리지도 않습니다.")
         if _LOCAL["use_markdown"]:
             md = _LOCAL["markdown_dir"]
@@ -882,7 +884,10 @@ def main():
         if _LOCAL["use_dokuwiki"]:
             print("- 도쿠위키 책 폴더: %s" % BOOKS_SRC_DIR)
             print("  책 .txt 파일이 들어 있어야 합니다.")
-        sys.exit(1)
+        print("(책이 없는 빈 사이트로 만들려면: build_books.py docs --allow-empty)")
+        sys.exit(3)
+    if not sources:
+        print("책이 없는 빈 사이트로 만듭니다. 지금까지 만들어 둔 책 결과물을 모두 정리합니다.")
 
     # removing a book is the mirror of adding one: delete its source file
     # or folder and nothing else. Prune any docs/<slug> output left over

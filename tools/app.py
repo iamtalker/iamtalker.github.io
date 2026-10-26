@@ -28,6 +28,7 @@ import config  # noqa: E402
 
 ROOT = config.REPO_ROOT
 ASK = "@@ASK@@"
+NO_BOOKS = 3    # build_books.py exit code: not a single book found
 NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: no console flashing up for child processes
 
 
@@ -72,6 +73,7 @@ def main():
 
     bg = ttk.Style().lookup("TFrame", "background") or root.cget("bg")
     q = queue.Queue()
+    answers = queue.Queue()   # the worker waits here for a yes/no from a dialog
     state = {"proc": None, "busy": False}
 
     top = ttk.Frame(root, padding=(16, 14, 16, 6))
@@ -137,21 +139,33 @@ def main():
             steps.append(("GitHub에 올리기", ["publish.py"]))
         return steps
 
-    def worker(steps):
+    def run_step(title, args):
+        """Run one script, streaming its output into the log; returns its exit code."""
         env = dict(os.environ, PYTHONIOENCODING="utf-8", BOOK_GUI="1")
+        q.put(("log", "\n=== %s ===\n" % title))
+        p = subprocess.Popen(
+            [python_exe(), "-u", os.path.join(TOOLS, args[0])] + args[1:], cwd=ROOT,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace", env=env, creationflags=NO_WINDOW)
+        state["proc"] = p
+        for line in p.stdout:
+            if line.startswith(ASK):
+                q.put(("ask", json.loads(line[len(ASK):])))
+            else:
+                q.put(("log", line))
+        return p.wait()
+
+    def worker(steps):
         for title, args in steps:
-            q.put(("log", "\n=== %s ===\n" % title))
-            p = subprocess.Popen(
-                [python_exe(), "-u", os.path.join(TOOLS, args[0])] + args[1:], cwd=ROOT,
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace", env=env, creationflags=NO_WINDOW)
-            state["proc"] = p
-            for line in p.stdout:
-                if line.startswith(ASK):
-                    q.put(("ask", json.loads(line[len(ASK):])))
-                else:
-                    q.put(("log", line))
-            if p.wait() != 0:
+            rc = run_step(title, args)
+            if rc == NO_BOOKS and args[0] == "build_books.py":
+                # no books at all: publishing would normally be refused; offer an empty site
+                q.put(("ask_empty", None))
+                if not answers.get():
+                    q.put(("cancelled", None))
+                    return
+                rc = run_step("책이 없는 빈 사이트로 만들기", args + ["--allow-empty"])
+            if rc != 0:
                 q.put(("done", False))
                 return
         q.put(("done", True))
@@ -164,6 +178,19 @@ def main():
                     put(val)
                 elif kind == "settings_done":
                     after_settings()
+                elif kind == "ask_empty":
+                    answers.put(messagebox.askyesno(
+                        "책이 없습니다",
+                        "글이 있는 폴더에서 책을 하나도 찾지 못했습니다.\n\n"
+                        "빈 사이트로 올릴까요?\n"
+                        "지금 사이트에 있는 모든 책과 글이 사라지고, 빈 첫 화면만 남습니다.\n"
+                        "(원본 글 파일과 GitHub의 댓글은 그대로입니다.)\n\n"
+                        "책을 만드는 중이었다면 [아니요]를 누르고 폴더와 파일 확장자(.md)를 확인하세요.",
+                        icon="warning", default="no"))
+                elif kind == "cancelled":
+                    set_busy(False)
+                    status.configure(text="취소했습니다. 아무것도 올리지 않았습니다.", foreground="#444")
+                    put("\n취소했습니다. 아무것도 올리지 않았습니다.\n")
                 elif kind == "ask":
                     ans = messagebox.askyesno("확인", val, icon="warning")
                     p = state["proc"]
