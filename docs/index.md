@@ -6,7 +6,7 @@ hero:
 ---
 
 <ol class="book-shelf">
-<li><a href="/단전호흡 테스트/">단전호흡 테스트</a></li>
+<li><a href="/단전호흡 테스트/단전호흡 테스트">단전호흡 테스트</a></li>
 </ol>
 
 <style>
