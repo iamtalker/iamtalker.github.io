@@ -6,9 +6,7 @@ hero:
 ---
 
 <ol class="book-shelf">
-<li><a href="/일베 분석/">일베 분석</a></li>
-<li><a href="/일베의 주장에 대한 반박/">일베의 주장에 대한 반박</a></li>
-<li><a href="/자유로의 초대/">자유로의 초대</a></li>
+<li><a href="/단전호흡 테스트/">단전호흡 테스트</a></li>
 </ol>
 
 <style>
