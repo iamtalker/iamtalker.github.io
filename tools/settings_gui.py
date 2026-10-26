@@ -195,7 +195,7 @@ def main():
     note("설치 화면에서 'Only select repositories'를 고르고 내 사이트 저장소를 선택하세요.\n"
          "Discussions 화면에서는 Features 항목의 Discussions 체크를 켭니다.", pady=(0, 6))
 
-    example = repo_from_remote() or "iamtalker/iamtalker.github.io"
+    example = repo_from_remote() or "myname/myname.github.io"
     note("② giscus.app 에서 코드를 만들어 아래에 통째로 붙여넣고 [값 자동 입력]을 누르세요\n"
          "giscus.app 의 '저장소' 칸에는 이렇게 쓰세요:  %s\n"
          "(https://github.com/ 나 .git 을 붙이지 않고, 아이디/저장소이름 만 씁니다)" % example, pady=0)
@@ -235,7 +235,7 @@ def main():
     field("댓글 저장소", "g_repo", None,
           "댓글이 저장될 GitHub 저장소를 '내GitHub아이디/저장소이름' 형태로 씁니다.\n"
           "(업로드용 '저장소 주소'와 달리 https://github.com/ 와 .git 은 붙이지 않습니다.)\n"
-          "예: iamtalker/iamtalker.github.io  (공개 저장소여야 하고, 저장소 Settings에서\n"
+          "예: myname/myname.github.io  (공개 저장소여야 하고, 저장소 Settings에서\n"
           "Discussions를 켜고 giscus 앱을 설치해야 합니다.) 비워두면 댓글창이 없습니다.")
     field("repo ID", "g_repoId", None,
           "https://giscus.app 에서 위 저장소를 입력하면 아래쪽에 나오는\n"
@@ -257,7 +257,7 @@ def main():
     field("저장소 주소", "git_remote", check_remote,
           "GitHub에서 만든 저장소 페이지의 초록색 'Code' 버튼 → HTTPS 탭에 나오는 주소를\n"
           "그대로 복사해 붙여넣으세요. 형태: https://github.com/내GitHub아이디/저장소이름.git\n"
-          "예: https://github.com/iamtalker/iamtalker.github.io.git\n"
+          "예: https://github.com/myname/myname.github.io.git\n"
           "(저장소 이름을 '내GitHub아이디.github.io'로 만들면 사이트 주소가\n"
           "https://내GitHub아이디.github.io 가 됩니다. 오른쪽 버튼 = 연결 확인)")
     field("브랜치", "git_branch", None, "GitHub Pages가 배포에 쓰는 브랜치 (보통 main)")

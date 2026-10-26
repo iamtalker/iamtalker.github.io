@@ -19,7 +19,7 @@ already has a page> reference or real inline text. This is what lets a
 loosely-structured document (headings with a bare reference straight
 underneath, no wrapping theme/post levels; or a theme with hand-written
 prose instead of an include) still work, not just the tidy 3-level shape
-the first book (자유로의 초대) happens to use everywhere.
+the first book (a long sample book) happens to use everywhere.
 
 References aren't limited to wordblock: any DokuWiki namespace works
 (bare id, :id, scrapbook:id, journal:2020-01:2020-01-01, etc. - colons
@@ -648,7 +648,7 @@ def build_one_book(book_slug, source_text):
                 # straight to the book's own top level, exactly like an
                 # ordinary 대분류 the book file wrote directly - visible
                 # as a plain link on the book's own title page (같은
-                # 자유로의 초대), never inside a sidebar, until you click
+                # a long sample book), never inside a sidebar, until you click
                 # into one and see ITS OWN internal headings there.
                 book_dir = os.path.join(OUT_DOCS, book_slug)
                 os.makedirs(book_dir, exist_ok=True)
