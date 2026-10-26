@@ -24,7 +24,27 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, v) } catch {} },
 }
 
-const unread = computed(() => items.value.filter((c) => Date.parse(c.createdAt) > seen.value))
+// notifications the visitor cleared: remembered in this browser only (the comments
+// themselves stay on GitHub; delete them there)
+const hidden = ref([])
+const visible = computed(() => items.value.filter((c) => !hidden.value.includes(c.url)))
+const unread = computed(() => visible.value.filter((c) => Date.parse(c.createdAt) > seen.value))
+
+function saveHidden() {
+  hidden.value = hidden.value.slice(-300)   // enough; comments older than the 20 listed drop out anyway
+  store.set('cb-hidden', JSON.stringify(hidden.value))
+}
+
+function dismiss(c) {
+  if (!hidden.value.includes(c.url)) hidden.value.push(c.url)
+  saveHidden()
+}
+
+function clearAll() {
+  markAllRead()
+  for (const c of visible.value) hidden.value.push(c.url)
+  saveHidden()
+}
 
 function ago(iso) {
   const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000))
@@ -75,6 +95,7 @@ onMounted(() => {
   if (MODE === 'owner' && store.get('cb-admin') !== '1') return
   show.value = true
   seen.value = Number(store.get('cb-seen') || 0)
+  try { hidden.value = JSON.parse(store.get('cb-hidden') || '[]') } catch { hidden.value = [] }
   load()
   timer = setInterval(onVisible, 60000)
   document.addEventListener('visibilitychange', onVisible)
@@ -94,17 +115,23 @@ onUnmounted(() => {
     <div v-if="open" class="cbell-pop">
       <div class="cbell-head">
         <strong>최근 댓글</strong>
-        <button type="button" class="cbell-link" @click="markAllRead">모두 읽음</button>
+        <span>
+          <button type="button" class="cbell-link" @click="markAllRead">모두 읽음</button>
+          <button type="button" class="cbell-link" title="이 브라우저의 알림 목록만 비웁니다. GitHub의 댓글은 그대로입니다." @click="clearAll">모두 지우기</button>
+        </span>
       </div>
-      <p v-if="!items.length" class="cbell-empty">아직 댓글이 없습니다.</p>
+      <p v-if="!visible.length" class="cbell-empty">{{ items.length ? '표시할 알림이 없습니다.' : '아직 댓글이 없습니다.' }}</p>
       <ul v-else>
-        <li v-for="c in items" :key="c.url" :class="{ fresh: Date.parse(c.createdAt) > seen }">
+        <li v-for="c in visible" :key="c.url" :class="{ fresh: Date.parse(c.createdAt) > seen }">
           <a :href="pageLink(c)" @click="onPick">
             <span class="cbell-meta">{{ c.author }} · {{ ago(c.createdAt) }}</span>
             <span class="cbell-text">{{ c.text }}</span>
             <span class="cbell-page">{{ pageName(c) }}</span>
           </a>
-          <a class="cbell-gh" :href="c.url" target="_blank" rel="noopener" title="GitHub에서 답글 달기">↗</a>
+          <span class="cbell-side">
+            <a class="cbell-gh" :href="c.url" target="_blank" rel="noopener" title="GitHub에서 답글 달기">↗</a>
+            <button type="button" class="cbell-x" title="이 알림 지우기" @click.stop="dismiss(c)">✕</button>
+          </span>
         </li>
       </ul>
     </div>
@@ -127,6 +154,10 @@ onUnmounted(() => {
 }
 .cbell-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 14px 8px; }
 .cbell-link { color: var(--vp-c-brand-1); font-size: 13px; cursor: pointer; }
+.cbell-link + .cbell-link { margin-left: 10px; }
+.cbell-side { flex: none; display: flex; flex-direction: column; align-items: center; padding: 4px 6px 0 0; }
+.cbell-x { padding: 2px 8px; font-size: 12px; color: var(--vp-c-text-3); cursor: pointer; }
+.cbell-x:hover { color: var(--vp-c-danger-1, #e5484d); }
 .cbell-empty { padding: 8px 14px; color: var(--vp-c-text-2); font-size: 14px; }
 .cbell-pop ul { list-style: none; margin: 0; padding: 0; }
 .cbell-pop li { display: flex; align-items: flex-start; border-top: 1px solid var(--vp-c-divider); }
