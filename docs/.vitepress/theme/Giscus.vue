@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, watch, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, watch, ref } from 'vue'
 import { useRoute } from 'vitepress'
 import { useData } from 'vitepress'
 import site from '../../../site.json'
@@ -7,6 +7,17 @@ import site from '../../../site.json'
 const route = useRoute()
 const { isDark } = useData()
 const el = ref(null)
+
+// Arrived through a #giscus-comments link (the comment bell): the comment box is
+// still empty at that moment, so the page is too short to bring its top to the top
+// of the screen. While that hash is active it gets room, and we scroll to it
+// ourselves once the room is there (VitePress scrolls before it exists).
+// (VitePress's route object has no hash, hence location.hash.)
+const jumped = ref(false)
+function syncJump() {
+  jumped.value = location.hash === '#giscus-comments'
+  if (jumped.value) nextTick(() => el.value && el.value.scrollIntoView({ block: 'start' }))
+}
 
 // comments are configured in site.json ("giscus"), written by the settings
 // window. Left blank, no comment box is shown at all.
@@ -48,19 +59,29 @@ function sendThemeToGiscus() {
   )
 }
 
-onMounted(loadGiscus)
+onMounted(() => {
+  loadGiscus()
+  syncJump()
+  window.addEventListener('hashchange', syncJump)
+})
+onUnmounted(() => window.removeEventListener('hashchange', syncJump))
 // giscus maps one discussion per page path, so a client-side route change
 // (VitePress is an SPA) needs a fresh embed, not just a re-render.
-watch(() => route.path, loadGiscus)
+watch(() => route.path, () => {
+  loadGiscus()
+  nextTick(syncJump)
+})
 watch(isDark, sendThemeToGiscus)
 </script>
 
 <template>
-  <div v-if="enabled" class="giscus-wrap" ref="el"></div>
+  <div v-if="enabled" id="giscus-comments" class="giscus-wrap" :class="{ jumped }" ref="el"></div>
 </template>
 
 <style>
+.giscus-wrap.jumped { min-height: calc(100vh - 100px); }
 .giscus-wrap {
+  scroll-margin-top: 72px; /* the sticky nav bar must not cover the top when jumped to (#giscus-comments) */
   margin-top: 48px;
   padding-top: 32px;
   border-top: 1px solid var(--vp-c-divider);

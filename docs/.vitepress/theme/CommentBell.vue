@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import site from '../../../site.json'
 
 // A bell in the nav bar that lists the newest comments. The list is a small
@@ -36,7 +36,13 @@ function ago(iso) {
 
 // giscus names each discussion after the page path (URL-encoded in older lists)
 const pageName = (c) => { try { return decodeURIComponent(c.page) } catch { return String(c.page) } }
-const pageLink = (c) => '/' + pageName(c).replace(/^\/+/, '')
+const pageLink = (c) => '/' + pageName(c).replace(/^\/+/, '') + '#giscus-comments'  // land on the comment box, not the top
+
+function onPick() {
+  open.value = false
+  // same page: the address changes without a page change, so tell the comment box to jump
+  setTimeout(() => window.dispatchEvent(new Event('hashchange')), 60)
+}
 
 function markAllRead() {
   if (!items.value.length) return
@@ -44,12 +50,10 @@ function markAllRead() {
   store.set('cb-seen', String(seen.value))
 }
 
-onMounted(async () => {
-  if (!REPO || MODE === 'off') return
-  if (new URLSearchParams(location.search).get('admin') === '1') store.set('cb-admin', '1')
-  if (MODE === 'owner' && store.get('cb-admin') !== '1') return
-  show.value = true
-  seen.value = Number(store.get('cb-seen') || 0)
+// the list is read when the page opens, then again every minute while the tab
+// is visible and whenever the tab comes back to the front - so a comment that
+// arrives while the page is open shows up without a reload
+async function load() {
   try {
     // the time value keeps GitHub's CDN from serving an old copy for long.
     // ?cb-src=/some.json (a path on this site only) swaps in another list, for testing.
@@ -60,6 +64,25 @@ onMounted(async () => {
     const res = await fetch(url, { cache: 'no-store' })
     if (res.ok) items.value = (await res.json()).comments || []
   } catch {}
+}
+
+let timer = null
+const onVisible = () => { if (document.visibilityState === 'visible') load() }
+
+onMounted(() => {
+  if (!REPO || MODE === 'off') return
+  if (new URLSearchParams(location.search).get('admin') === '1') store.set('cb-admin', '1')
+  if (MODE === 'owner' && store.get('cb-admin') !== '1') return
+  show.value = true
+  seen.value = Number(store.get('cb-seen') || 0)
+  load()
+  timer = setInterval(onVisible, 60000)
+  document.addEventListener('visibilitychange', onVisible)
+})
+
+onUnmounted(() => {
+  clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisible)
 })
 </script>
 
@@ -76,7 +99,7 @@ onMounted(async () => {
       <p v-if="!items.length" class="cbell-empty">아직 댓글이 없습니다.</p>
       <ul v-else>
         <li v-for="c in items" :key="c.url" :class="{ fresh: Date.parse(c.createdAt) > seen }">
-          <a :href="pageLink(c)">
+          <a :href="pageLink(c)" @click="onPick">
             <span class="cbell-meta">{{ c.author }} · {{ ago(c.createdAt) }}</span>
             <span class="cbell-text">{{ c.text }}</span>
             <span class="cbell-page">{{ pageName(c) }}</span>
