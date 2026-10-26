@@ -34,8 +34,9 @@ function ago(iso) {
   return `${Math.round(m / 1440)}일 전`
 }
 
-// giscus names each discussion after the page path
-const pageLink = (c) => '/' + String(c.page).replace(/^\/+/, '')
+// giscus names each discussion after the page path (URL-encoded in older lists)
+const pageName = (c) => { try { return decodeURIComponent(c.page) } catch { return String(c.page) } }
+const pageLink = (c) => '/' + pageName(c).replace(/^\/+/, '')
 
 function markAllRead() {
   if (!items.value.length) return
@@ -78,7 +79,7 @@ onMounted(async () => {
           <a :href="pageLink(c)">
             <span class="cbell-meta">{{ c.author }} · {{ ago(c.createdAt) }}</span>
             <span class="cbell-text">{{ c.text }}</span>
-            <span class="cbell-page">{{ c.page }}</span>
+            <span class="cbell-page">{{ pageName(c) }}</span>
           </a>
           <a class="cbell-gh" :href="c.url" target="_blank" rel="noopener" title="GitHub에서 답글 달기">↗</a>
         </li>

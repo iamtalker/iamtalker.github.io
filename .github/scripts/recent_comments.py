@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 
 QUERY = """
 query($owner:String!, $name:String!) {
@@ -60,7 +61,7 @@ def main():
                 items.append({
                     "createdAt": x["createdAt"],
                     "author": (x["author"] or {}).get("login", "ghost"),
-                    "page": d["title"],          # giscus names the discussion after the page path
+                    "page": urllib.parse.unquote(d["title"]),   # giscus names the discussion after the (URL-encoded) page path
                     "text": text[:SNIPPET] + ("…" if len(text) > SNIPPET else ""),
                     "url": x["url"],
                 })
