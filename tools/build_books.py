@@ -900,7 +900,13 @@ def main():
         if book_slug in all_sidebars:
             print("duplicate book name %r - the later source overwrites the earlier one" % book_slug)
         all_sidebars[book_slug] = build_one_book(book_slug, text)
-        books.append({"slug": book_slug})
+        entry = {"slug": book_slug}
+        if len(all_sidebars[book_slug]) == 1:
+            # a book with a single chapter/page: its contents page would list
+            # that one entry, so the library and the nav bar go straight to it
+            d = all_sidebars[book_slug][0]
+            entry["link"] = d["link"] if "link" in d else "/%s/%s/" % (book_slug, slugify_path(d["text"]))
+        books.append(entry)
 
     with open(os.path.join(REPO_ROOT, "sidebar.json"), "w", encoding="utf-8") as f:
         json.dump(all_sidebars, f, ensure_ascii=False, indent=2)

@@ -57,7 +57,7 @@ hero:
     json.dumps(site["title"], ensure_ascii=False),
     json.dumps(site["tagline"], ensure_ascii=False),
     "\n".join(
-        '<li><a href="/%s/">%s</a></li>' % (b["slug"], b["slug"])
+        '<li><a href="%s">%s</a></li>' % (b.get("link") or "/%s/" % b["slug"], b["slug"])
         for b in books
     ),
 )

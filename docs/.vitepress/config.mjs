@@ -89,7 +89,7 @@ export default defineConfig({
   // resolve, which would otherwise fail the build.
   ignoreDeadLinks: true,
   themeConfig: {
-    nav: books.map((b) => ({ text: b.slug, link: `/${b.slug}/` })),
+    nav: books.map((b) => ({ text: b.slug, link: b.link || `/${b.slug}/` })),
     sidebar,
     search: { provider: 'local' },
     // the left sidebar now shows each page's own heading tree too (see
