@@ -29,7 +29,7 @@ const CATEGORY = G.category || 'Announcements'
 const CATEGORY_ID = G.categoryId
 const enabled = !!(REPO && REPO_ID && CATEGORY_ID)
 
-// the page path without the leading slash, decoded: "단전호흡 테스트/단전호흡 테스트"
+// the page path without the leading slash, decoded: "book name/post name"
 function pageTerm() {
   const p = location.pathname.replace(/^\/+/, '')
   try { return decodeURIComponent(p) } catch { return p }
