@@ -78,10 +78,20 @@ async function load() {
     // the time value keeps GitHub's CDN from serving an old copy for long.
     // ?cb-src=/some.json (a path on this site only) swaps in another list, for testing.
     const own = new URLSearchParams(location.search).get('cb-src')
-    const url = own && own.startsWith('/') && !own.startsWith('//')
-      ? own
-      : `https://raw.githubusercontent.com/${REPO}/comments-data/recent-comments.json?t=${Math.floor(Date.now() / 20000)}`
-    const res = await fetch(url, { cache: 'no-store' })
+    let res
+    if (own && own.startsWith('/') && !own.startsWith('//')) {
+      res = await fetch(own, { cache: 'no-store' })
+    } else {
+      // GitHub's API serves the file with a 60 s cache (raw.githubusercontent.com holds
+      // on to an old copy for ~5 min, whatever is appended to the address), and an
+      // unchanged file comes back as a cheap 304 that does not count against the rate limit
+      res = await fetch(`https://api.github.com/repos/${REPO}/contents/recent-comments.json?ref=comments-data`,
+        { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-cache' }).catch(() => null)
+      if (!res || !res.ok) {   // rate-limited or blocked: fall back to the raw file
+        res = await fetch(`https://raw.githubusercontent.com/${REPO}/comments-data/recent-comments.json?t=${Math.floor(Date.now() / 20000)}`,
+          { cache: 'no-store' })
+      }
+    }
     if (res.ok) items.value = (await res.json()).comments || []
   } catch {}
 }
