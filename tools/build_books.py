@@ -838,8 +838,24 @@ def main():
     os.makedirs(OUT_DOCS, exist_ok=True)
     sources = collect_sources()
     if not sources:
-        print("no books found - check the source folders in settings")
-        return
+        # stop with an error: carrying on would publish the OLD site again
+        # and report success
+        print("책을 하나도 찾지 못했습니다. 아무것도 바꾸지 않았고, 올리지도 않습니다.")
+        if _LOCAL["use_markdown"]:
+            md = _LOCAL["markdown_dir"]
+            print("- 마크다운 폴더: %s" % md)
+            print("  .md 파일, 또는 .md 파일이 든 하위 폴더가 있어야 합니다.")
+            txts = []
+            for dp, dn, fn in os.walk(md):
+                dn[:] = [d for d in dn if not d.startswith((".", "_"))]
+                txts += [f for f in fn if f.lower().endswith(".txt") and not f.startswith((".", "_"))]
+            if txts:
+                print("  대신 .txt 파일 %d개를 찾았습니다 (예: %s)." % (len(txts), txts[0]))
+                print("  마크다운 글은 확장자가 .md 여야 합니다. 파일 이름의 .txt 를 .md 로 바꿔 주세요.")
+        if _LOCAL["use_dokuwiki"]:
+            print("- 도쿠위키 책 폴더: %s" % BOOKS_SRC_DIR)
+            print("  책 .txt 파일이 들어 있어야 합니다.")
+        sys.exit(1)
 
     # removing a book is the mirror of adding one: delete its source file
     # or folder and nothing else. Prune any docs/<slug> output left over

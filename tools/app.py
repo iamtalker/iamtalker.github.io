@@ -54,8 +54,8 @@ def site_urls(remote):
     return site, "https://github.com/%s/%s/actions" % (user, repo)
 
 
-def run_settings():
-    subprocess.run([python_exe(), os.path.join(TOOLS, "settings_gui.py")], cwd=ROOT,
+def run_settings(script="settings_gui.py"):
+    subprocess.run([python_exe(), os.path.join(TOOLS, script)], cwd=ROOT,
                    creationflags=NO_WINDOW)
 
 
@@ -87,6 +87,8 @@ def main():
     settings_btn.pack(side="left", padx=(8, 0))
     reset_btn = ttk.Button(btns, text="설정 초기화")
     reset_btn.pack(side="left", padx=(8, 0))
+    comments_btn = ttk.Button(btns, text="댓글 설정")
+    comments_btn.pack(side="left", padx=(8, 0))
     site_btn = ttk.Button(btns, text="내 사이트 열기")
     site_btn.pack(side="right")
     actions_btn = ttk.Button(btns, text="올라가는 중인지 보기")
@@ -125,7 +127,7 @@ def main():
 
     def set_busy(busy):
         state["busy"] = busy
-        for b in (upload_btn, settings_btn, reset_btn):
+        for b in (upload_btn, settings_btn, reset_btn, comments_btn):
             b.state(["disabled"] if busy else ["!disabled"])
 
     def pipeline(local):
@@ -202,11 +204,11 @@ def main():
         set_busy(True)
         threading.Thread(target=worker, args=(pipeline(local),), daemon=True).start()
 
-    def open_settings():
+    def open_settings(script="settings_gui.py"):
         set_busy(True)
 
         def run():
-            run_settings()
+            run_settings(script)
             q.put(("settings_done", None))   # the UI is only touched from poll()
         threading.Thread(target=run, daemon=True).start()
 
@@ -253,6 +255,7 @@ def main():
     upload_btn.configure(command=start_upload)
     settings_btn.configure(command=open_settings)
     reset_btn.configure(command=reset_settings)
+    comments_btn.configure(command=lambda: open_settings("comments_wizard.py"))
     site_btn.configure(command=open_site)
     actions_btn.configure(command=open_actions)
 

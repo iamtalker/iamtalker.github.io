@@ -11,15 +11,14 @@ import shutil
 import subprocess
 import sys
 import tkinter as tk
-import tkinter.font as tkfont
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config  # noqa: E402
 import remote_check  # noqa: E402
+from ui import entry_row, open_btn, text  # noqa: E402
 
-WRAP = 540
 
 
 def git_config_get(key):
@@ -41,8 +40,6 @@ def run():
     root.geometry("640x560")
     root.minsize(600, 520)
 
-    bg = ttk.Style().lookup("TFrame", "background") or root.cget("bg")
-    note_font = tkfont.nametofont("TkDefaultFont")
 
     v = {
         "source": tk.StringVar(value="markdown" if local["use_markdown"] and not local["use_dokuwiki"]
@@ -82,56 +79,6 @@ def run():
     next_btn.pack(side="right")
     back_btn.pack(side="right", padx=6)
 
-    # ---- small widgets ----------------------------------------------------
-    def text(parent, s, strong=False, pady=(0, 6)):
-        """Selectable (copyable) paragraph."""
-        t = tk.Text(parent, height=1, width=60, wrap="word", relief="flat", borderwidth=0,
-                    highlightthickness=0, background=bg, font=note_font if not strong else ("", 10, "bold"),
-                    foreground="#222" if strong else "#444", cursor="xterm")
-        t.insert("1.0", s)
-
-        def fit(_e=None):
-            n = t.count("1.0", "end-1c", "displaylines")
-            # count() returns the display-line BREAKS between the two indexes: lines = breaks + 1
-            t.configure(height=(n[0] if n else 0) + 1)
-
-        def block(e):
-            if (e.state & 0x4) and e.keysym.lower() in ("c", "a"):
-                return None
-            if e.keysym in ("Left", "Right", "Up", "Down", "Home", "End", "Prior", "Next"):
-                return None
-            return "break"
-        def set_text(s):
-            # replace the text AND re-fit the height, or a longer text gets cut off
-            t.delete("1.0", "end")
-            t.insert("1.0", s)
-            t.update_idletasks()
-            fit()
-        t.set_text = set_text
-        t.bind("<Key>", block)
-        t.bind("<Configure>", fit)
-        t.bind("<Button-1>", lambda e: t.focus_set())
-        t.pack(fill="x", pady=pady)
-        return t
-
-    def open_btn(parent, label, url_fn):
-        def go():
-            url = url_fn()
-            if url:
-                webbrowser.open(url)
-        b = ttk.Button(parent, text=label, command=go)
-        b.pack(anchor="w", pady=(0, 6))
-        return b
-
-    def entry_row(parent, label, var, width=34, browse=None):
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=3)
-        ttk.Label(row, text=label, width=14).pack(side="left")
-        ttk.Entry(row, textvariable=var, width=width).pack(side="left", fill="x", expand=True)
-        if browse:
-            ttk.Button(row, text="찾아보기", command=browse).pack(side="left", padx=(6, 0))
-        return row
-
     # ---- pages: each returns a validate() -> bool -------------------------
     def page_source():
         text(body, "내 글이 어디에 있나요?", strong=True)
@@ -162,6 +109,26 @@ def run():
             if not f or not os.path.isdir(f):
                 messagebox.showerror("폴더", "폴더를 찾을 수 없습니다. [찾아보기]로 골라 주세요.")
                 return False
+            # catch the classic mistake now: wrong file type for the chosen source
+            want = ".md" if v["source"].get() == "markdown" else ".txt"
+            found = other = 0
+            for dp, dn, fn in os.walk(f):
+                dn[:] = [d for d in dn if not d.startswith((".", "_"))]
+                for name in fn:
+                    low = name.lower()
+                    found += low.endswith(want)
+                    other += low.endswith(".txt" if want == ".md" else ".md")
+            if not found:
+                extra = ""
+                if other:
+                    extra = ("\n\n대신 %s 파일 %d개가 있습니다. %s"
+                             % (".txt" if want == ".md" else ".md", other,
+                                "마크다운 글은 확장자가 .md 여야 하니 파일 이름을 바꿔 주세요."
+                                if want == ".md" else
+                                "마크다운 글이라면 위에서 '마크다운' 쪽을 고르세요."))
+                return messagebox.askyesno(
+                    "글을 찾지 못했습니다",
+                    "이 폴더에서 %s 파일을 찾지 못했습니다.%s\n\n그래도 이 폴더로 계속할까요?" % (want, extra))
             return True
         return validate
 
@@ -258,7 +225,7 @@ def run():
         text(body, "사이트에 보일 이름을 정하세요. (나중에 바꿀 수 있습니다)", strong=True)
         entry_row(body, "사이트 제목", v["title"], width=40)
         entry_row(body, "한 줄 소개", v["tagline"], width=40)
-        text(body, "댓글창은 나중에 [설정]의 '댓글' 항목에서 켤 수 있습니다.", pady=(12, 0))
+        text(body, "댓글창은 나중에 메인 창의 [댓글 설정] 버튼에서 켤 수 있습니다.", pady=(12, 0))
         return lambda: True
 
     def page_done():

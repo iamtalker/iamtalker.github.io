@@ -58,11 +58,15 @@ GitHub Pages에 올리는 도구. 사이트 구조는 **서재 → 책 → 대�
 
 ## 댓글 (giscus, 선택)
 
-[설정]의 "댓글" 항목에서 켠다. 순서:
+메인 창의 **[댓글 설정]** 버튼이 별도 마법사를 연다(처음 설정 마법사와는 따로라서, 댓글이 필요할 때만 한다).
 
-1. GitHub 에서 **giscus 앱 설치**(내 사이트 저장소 선택)와 저장소 **Discussions 켜기** — 설정 창의 버튼이 해당 페이지를 열어 준다.
-2. [giscus.app](https://giscus.app/ko) 의 "저장소" 칸에 `아이디/저장소이름` 형태로 쓴다(`https://github.com/` 나 `.git` 은 붙이지 않는다).
-3. 맨 아래 생성된 `<script …>` 코드를 설정 창에 통째로 붙여넣고 **[값 자동 입력]**.
+1. **사용 여부** — 켜기 / 끄기. 끄면 바로 저장 단계로 가서 댓글 설정을 비운다.
+2. **GitHub 준비** — 댓글 저장소(`아이디/저장소이름`)를 적고, 버튼으로 **giscus 앱 설치**와 **Discussions 켜기** 페이지를 연다.
+3. **코드 만들기** — [giscus.app](https://giscus.app/ko) 에서 저장소를 입력하고 카테고리 Announcements 를 고른 뒤, 맨 아래 `<script …>` 코드를 복사한다.
+4. **코드 붙여넣기** — 붙여넣으면 repo ID 와 카테고리 ID 를 자동으로 읽는다.
+5. **끝** — 저장한다. 그다음 [사이트에 올리기]를 하면 1~2분 뒤 글 아래에 댓글창이 나타난다.
+
+(전체 설정 창의 "댓글" 항목에서 값을 직접 고칠 수도 있다.)
 
 주의: 업로드용 "저장소 주소"는 `https://github.com/아이디/저장소이름.git`(전체 주소), 댓글의 "댓글 저장소"는 `아이디/저장소이름` 으로 형식이 다르다.
 
@@ -75,7 +79,7 @@ GitHub Pages에 올리는 도구. 사이트 구조는 **서재 → 책 → 대�
 
 - `update.bat` — 메인 창(`tools/app.py`)을 연다. 올리기와 설정이 한 창에 있다.
 - `tools/app.py` — 메인 창. 변환/업로드 스크립트를 순서대로 실행하고 로그를 보여 준다.
-- `tools/wizard.py` — 처음 설정 마법사. `tools/settings_gui.py` — 전체 설정 창. `tools/config.py` — 설정 읽기/쓰기.
+- `tools/wizard.py` — 처음 설정 마법사. `tools/comments_wizard.py` — 댓글 설정 마법사. `tools/ui.py` — 두 마법사가 같이 쓰는 위젯. `tools/settings_gui.py` — 전체 설정 창. `tools/config.py` — 설정 읽기/쓰기.
 - `tools/remote_check.py` — GitHub 저장소 주소 검사("연결 확인").
 - `tools/build_books.py` — 핵심 변환기. `tools/markdown_source.py` — 마크다운 폴더를 변환기 입력으로 바꾸는 어댑터.
 - `tools/build_library.py` — 서재 첫 페이지(`docs/index.md`) 생성. `tools/publish.py` — commit + push.
