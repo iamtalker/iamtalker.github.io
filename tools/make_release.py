@@ -84,7 +84,7 @@ def leak_check(dest, owner):
         if os.sep + ".git" in dp or "package-lock" in dp:
             continue
         for fn in files:
-            if fn == "package-lock.json":
+            if fn in ("package-lock.json", "make_release.py"):   # the latter lists the needles
                 continue
             p = os.path.join(dp, fn)
             try:
