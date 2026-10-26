@@ -14,11 +14,14 @@ The release repository defaults to <owner>/githubio_book, where <owner> comes
 from this folder's own `origin` URL. Needs git, and the gh CLI for --tag.
 """
 import argparse
+import io
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -49,23 +52,19 @@ def export_clean(dest):
     arch = subprocess.run(["git", "archive", "HEAD"], cwd=ROOT, capture_output=True)
     if arch.returncode != 0:
         sys.exit("git archive failed: " + arch.stderr.decode("utf-8", "replace"))
-    tar = os.path.join(dest, "_a.tar")
-    with open(tar, "wb") as f:
-        f.write(arch.stdout)
-    run(["tar", "-xf", "_a.tar"], cwd=dest)
-    os.remove(tar)
-
-    docs = os.path.join(dest, "docs")
-    for entry in os.listdir(docs):
-        if entry != ".vitepress":      # book folders, public/, index.md: all regenerated or dropped
-            p = os.path.join(docs, entry)
-            shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
+    # tarfile, not the tar command: Windows' tar mangles Korean file names.
+    # Books never get extracted: under docs/ only .vitepress is kept
+    # (book folders and public/ are dropped, index.md is rebuilt empty below).
+    with tarfile.open(fileobj=io.BytesIO(arch.stdout)) as tf:
+        keep = [m for m in tf.getmembers()
+                if not m.name.startswith("docs/") or m.name.startswith("docs/.vitepress")]
+        tf.extractall(dest, members=keep)
+    os.makedirs(os.path.join(dest, "docs"), exist_ok=True)
     for name, text in (("books.json", "[]\n"), ("sidebar.json", "{}\n")):
         with open(os.path.join(dest, name), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
     # site.json at defaults, then an empty library page built by the tool itself
     with open(os.path.join(dest, "site.json"), "w", encoding="utf-8", newline="\n") as f:
-        import json
         json.dump(config.DEFAULT_SITE, f, ensure_ascii=False, indent=2)
         f.write("\n")
     run([sys.executable, os.path.join("tools", "build_library.py")], cwd=dest)
@@ -77,7 +76,6 @@ def leak_check(dest, owner):
     needles = [owner, "MyData", "DokuWikiStick"]
     try:
         with open(os.path.join(ROOT, "books.json"), encoding="utf-8") as f:
-            import json
             needles += [b["slug"] for b in json.load(f)]
     except (OSError, ValueError, KeyError):
         pass
