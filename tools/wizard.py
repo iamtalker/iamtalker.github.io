@@ -10,12 +10,14 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import tkinter as tk
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config  # noqa: E402
+import installer  # noqa: E402
 import remote_check  # noqa: E402
 from ui import entry_row, open_btn, text  # noqa: E402
 
@@ -93,8 +95,17 @@ def run():
             if d:
                 v["folder"].set(os.path.normpath(d))
         entry_row(body, "글이 든 폴더", v["folder"], browse=pick)
+        stick = open_btn(body, "도쿠위키가 없나요? 도쿠위키 받는 곳 열기",
+                         lambda: "https://download.dokuwiki.org/")
+        stick.pack_forget()
 
         def refresh_source():
+            # only offer the DokuWiki page when there is no DokuWiki folder yet
+            f = v["folder"].get().strip()
+            if v["source"].get() == "dokuwiki" and not (f and os.path.isdir(f)):
+                stick.pack(anchor="w", pady=(0, 6))
+            else:
+                stick.pack_forget()
             if v["source"].get() == "dokuwiki":
                 s = ("도쿠위키 폴더 안에서, 책으로 만들 .txt 파일이 들어 있는 폴더를 고르세요.\n"
                      "(.txt 파일 하나가 책 한 권이 됩니다. 예: …\\dokuwiki\\data\\pages\\내책들)")
@@ -132,22 +143,61 @@ def run():
             return True
         return validate
 
+    def auto_install(name, status, buttons):
+        """Run installer.install in a thread; rebuild this page when it ends."""
+        for b in buttons:
+            b.state(["disabled"])
+        next_btn.state(["disabled"])
+        back_btn.state(["disabled"])
+        status.set_text("%s 설치 중입니다. 1~2분 걸릴 수 있으니 창을 닫지 마세요…" % name)
+        done = {}
+
+        def work():
+            done["r"] = installer.install(name, lambda line: done.__setitem__("last", line))
+
+        def poll():
+            if "r" not in done:
+                if done.get("last"):
+                    status.set_text("%s 설치 중… %s" % (name, done["last"][:70]))
+                root.after(500, poll)
+                return
+            ok, msg = done["r"]
+            next_btn.state(["!disabled"])
+            show(state["i"])
+            if not ok:
+                messagebox.showwarning("자동 설치", msg + "\n\n아래 [설치 페이지 열기]로 직접 설치할 수 있습니다.")
+        threading.Thread(target=work, daemon=True).start()
+        poll()
+
     def page_tools():
         text(body, "필요한 프로그램이 깔려 있는지 확인합니다.", strong=True)
         git_ok = bool(shutil.which("git"))
         text(body, ("✔ git 이 설치되어 있습니다." if git_ok else
                     "✘ git 이 없습니다. 글을 GitHub에 올리는 데 꼭 필요합니다."), pady=(0, 2))
         if not git_ok:
-            open_btn(body, "git 설치 페이지 열기 (설치 후 이 창을 다시 여세요)",
+            status = text(body, "", pady=(0, 4))
+            btns = []
+            if installer.have_winget():
+                b = ttk.Button(body, text="git 자동으로 설치하기",
+                               command=lambda: auto_install("git", status, btns))
+                b.pack(anchor="w", pady=(0, 4))
+                btns.append(b)
+            open_btn(body, "git 설치 페이지 열기 (직접 설치)",
                      lambda: "https://git-scm.com/download/win")
         if v["source"].get() == "dokuwiki":
             pandoc = config.find_pandoc(local["pandoc"])
             text(body, ("✔ pandoc 이 설치되어 있습니다." if pandoc else
-                        "✘ pandoc 이 없습니다. 도쿠위키 글을 바꾸는 데 필요합니다.\n"
-                        "   설치 후 이 창을 다시 여세요. (명령 프롬프트에서  winget install pandoc)"),
-                 pady=(8, 2))
+                        "✘ pandoc 이 없습니다. 도쿠위키 글을 바꾸는 데 필요합니다."), pady=(8, 2))
             if not pandoc:
-                open_btn(body, "pandoc 설치 페이지 열기", lambda: "https://pandoc.org/installing.html")
+                pstatus = text(body, "", pady=(0, 4))
+                pbtns = []
+                if installer.have_winget():
+                    pb = ttk.Button(body, text="pandoc 자동으로 설치하기",
+                                    command=lambda: auto_install("pandoc", pstatus, pbtns))
+                    pb.pack(anchor="w", pady=(0, 4))
+                    pbtns.append(pb)
+                open_btn(body, "pandoc 설치 페이지 열기 (직접 설치)",
+                         lambda: "https://pandoc.org/installing.html")
             v["pandoc"] = pandoc
         else:
             v["pandoc"] = local["pandoc"]
