@@ -306,7 +306,8 @@ def main():
             "git_branch": vars_["git_branch"].get().strip() or "main",
             "commit_message": vars_["commit_message"].get().strip() or "content update",
         })
-        config.save_site({
+        new_site = config.load_site()   # keep keys this form doesn't show (e.g. commentBell)
+        new_site.update({
             "title": vars_["title"].get().strip() or config.DEFAULT_SITE["title"],
             "tagline": vars_["tagline"].get().strip(),
             "description": vars_["description"].get().strip(),
@@ -318,6 +319,7 @@ def main():
                 "categoryId": vars_["g_categoryId"].get().strip(),
             },
         })
+        config.save_site(new_site)
         messagebox.showinfo("설정", "저장했습니다.")
         root.destroy()
 

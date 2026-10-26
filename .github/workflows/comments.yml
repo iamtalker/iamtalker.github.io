@@ -1,0 +1,42 @@
+name: Update recent comments
+
+# Runs when a giscus comment (a GitHub Discussion comment) is created, edited or
+# deleted. It does NOT rebuild the site: it only refreshes a tiny
+# recent-comments.json on the separate "comments-data" branch, which the site's
+# bell icon reads at runtime. Pushing that branch does not start the Pages deploy
+# (deploy.yml only reacts to main).
+
+on:
+  discussion_comment:
+    types: [created, edited, deleted]
+  discussion:
+    types: [created, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  discussions: read
+
+concurrency:
+  group: recent-comments
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect the newest comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/recent_comments.py "$GITHUB_REPOSITORY" "$RUNNER_TEMP/recent-comments.json"
+      - name: Publish to the comments-data branch
+        run: |
+          cd "$RUNNER_TEMP"
+          rm -rf data && mkdir data && cp recent-comments.json data/
+          cd data
+          git init -q -b comments-data
+          git add recent-comments.json
+          git -c user.name="github-actions" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Update recent comments"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" comments-data

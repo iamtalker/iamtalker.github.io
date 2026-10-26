@@ -68,6 +68,18 @@ GitHub Pages에 올리는 도구. 사이트 구조는 **서재 → 책 → 대�
 
 (전체 설정 창의 "댓글" 항목에서 값을 직접 고칠 수도 있다.)
 
+### 새 댓글 알림 (🔔)
+
+사이트 상단 바의 🔔이 최근 댓글 20개를 보여 주고, 아직 안 본 댓글 수를 배지로 표시한다. 항목을 누르면 그 글로
+이동하고, 옆의 ↗ 는 GitHub 에서 답글을 달 수 있는 곳으로 간다. **[모두 읽음]** 은 이 브라우저에만 기억된다.
+
+- 댓글이 달리면 `.github/workflows/comments.yml` 이 돌아 최근 댓글 목록(`recent-comments.json`)만 `comments-data`
+  브랜치에 갱신한다. **사이트를 다시 만들지 않으므로** 보통 1분 안에 반영되고, 🔔 은 방문할 때마다 이 파일을 읽어 온다.
+- 기본값은 **나에게만 보임**이다. 주소 끝에 `?admin=1` 을 붙여 한 번 접속(`https://아이디.github.io/?admin=1`)하면
+  그 브라우저에서 🔔 이 나타난다. 모든 방문자에게 보이려면 `site.json` 의 `"commentBell"` 을 `"all"`, 끄려면 `"off"`.
+- 댓글 저장소가 **공개**여야 하고, 알림은 사이트를 열어야 확인된다(메일/푸시는 아니다 — 바로 받으려면 GitHub 저장소의
+  Watch → Discussions 를 켠다).
+
 주의: 업로드용 "저장소 주소"는 `https://github.com/아이디/저장소이름.git`(전체 주소), 댓글의 "댓글 저장소"는 `아이디/저장소이름` 으로 형식이 다르다.
 
 ## 설정 파일 (설정 창이 만들어 준다)
@@ -85,7 +97,7 @@ GitHub Pages에 올리는 도구. 사이트 구조는 **서재 → 책 → 대�
 - `tools/build_library.py` — 서재 첫 페이지(`docs/index.md`) 생성. `tools/publish.py` — commit + push.
 - `tools/make_release.py` — 책·개인 설정을 뺀 도구 사본을 배포용 저장소에 올린다.
 - `docs/.vitepress/config.mjs` — `site.json`/`books.json`/`sidebar.json`으로 nav·사이드바 구성.
-- `.github/workflows/deploy.yml` — `main`에 push되면 빌드 후 Pages 배포.
+- `.github/workflows/deploy.yml` — `main`에 push되면 빌드 후 Pages 배포. `.github/workflows/comments.yml` + `.github/scripts/recent_comments.py` — 새 댓글 알림용 목록 갱신. `docs/.vitepress/theme/CommentBell.vue` — 🔔.
 
 ## 도구만 따로 배포하기
 

@@ -34,6 +34,9 @@ DEFAULT_SITE = {
     "tagline": "",
     "description": "",
     "lang": "ko-KR",
+    # bell icon with the newest comments in the nav bar: "owner" (only browsers
+    # opened once with ?admin=1), "all" or "off"
+    "commentBell": "owner",
     # giscus comments (https://giscus.app); blank repo = no comment box
     "giscus": {"repo": "", "repoId": "", "category": "Announcements", "categoryId": ""},
 }
