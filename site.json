@@ -1,8 +1,9 @@
 {
-  "title": "test",
+  "title": "iamtalker",
   "tagline": "",
   "description": "",
   "lang": "ko-KR",
+  "commentBell": "owner",
   "giscus": {
     "repo": "iamtalker/iamtalker.github.io",
     "repoId": "R_kgDOQJL7Hg",
