@@ -92,7 +92,8 @@ def run():
 
         def fit(_e=None):
             n = t.count("1.0", "end-1c", "displaylines")
-            t.configure(height=max(1, n[0] if n else 1))
+            # count() returns the display-line BREAKS between the two indexes: lines = breaks + 1
+            t.configure(height=(n[0] if n else 0) + 1)
 
         def block(e):
             if (e.state & 0x4) and e.keysym.lower() in ("c", "a"):
@@ -100,6 +101,13 @@ def run():
             if e.keysym in ("Left", "Right", "Up", "Down", "Home", "End", "Prior", "Next"):
                 return None
             return "break"
+        def set_text(s):
+            # replace the text AND re-fit the height, or a longer text gets cut off
+            t.delete("1.0", "end")
+            t.insert("1.0", s)
+            t.update_idletasks()
+            fit()
+        t.set_text = set_text
         t.bind("<Key>", block)
         t.bind("<Configure>", fit)
         t.bind("<Button-1>", lambda e: t.focus_set())
@@ -146,9 +154,7 @@ def run():
             else:
                 s = ("폴더 하나를 고르세요. 그 안의 하위 폴더 하나가 책 한 권이 되고,\n"
                      "책 폴더 안의 폴더는 장, 그 안의 .md 파일은 글이 됩니다.")
-            hint.configure(state="normal")
-            hint.delete("1.0", "end")
-            hint.insert("1.0", s)
+            hint.set_text(s)
         refresh_source()
 
         def validate():
@@ -238,9 +244,7 @@ def run():
             kind, msg = remote_check.check(
                 remote_check.make_url(v["user"].get(), v["repo"].get()), "main")
             icon = {"ok": "✔ ", "warn": "△ ", "error": "✘ "}[kind]
-            result.configure(state="normal")
-            result.delete("1.0", "end")
-            result.insert("1.0", icon + msg)
+            result.set_text(icon + msg)
         ttk.Button(body, text="⑤ 연결 확인", command=verify).pack(anchor="w", pady=(4, 0))
 
         def validate():

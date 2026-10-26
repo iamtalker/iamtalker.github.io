@@ -86,7 +86,8 @@ def main():
 
         def fit(_e=None):
             n = t.count("1.0", "end-1c", "displaylines")
-            t.configure(height=max(1, n[0] if n else 1))
+            # count() returns the display-line BREAKS between the two indexes: lines = breaks + 1
+            t.configure(height=(n[0] if n else 0) + 1)
 
         def block(e):
             # keep selection and Ctrl+C / Ctrl+A, refuse any editing
