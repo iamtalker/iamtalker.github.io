@@ -29,6 +29,12 @@ const CATEGORY = G.category || 'Announcements'
 const CATEGORY_ID = G.categoryId
 const enabled = !!(REPO && REPO_ID && CATEGORY_ID)
 
+// the page path without the leading slash, decoded: "단전호흡 테스트/단전호흡 테스트"
+function pageTerm() {
+  const p = location.pathname.replace(/^\/+/, '')
+  try { return decodeURIComponent(p) } catch { return p }
+}
+
 function loadGiscus() {
   if (!enabled || !el.value) return
   el.value.innerHTML = ''
@@ -40,7 +46,11 @@ function loadGiscus() {
   script.setAttribute('data-repo-id', REPO_ID)
   script.setAttribute('data-category', CATEGORY)
   script.setAttribute('data-category-id', CATEGORY_ID)
-  script.setAttribute('data-mapping', 'pathname')
+  // One discussion per page, named after the page path. "pathname" would use the
+  // browser's percent-encoded path (%EB%8B%A8...), which makes GitHub's discussion
+  // titles unreadable for non-ASCII page names; "specific" lets us name it ourselves.
+  script.setAttribute('data-mapping', 'specific')
+  script.setAttribute('data-term', pageTerm())
   script.setAttribute('data-strict', '0')
   script.setAttribute('data-reactions-enabled', '1')
   script.setAttribute('data-emit-metadata', '0')
