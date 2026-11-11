@@ -4,6 +4,18 @@ DokuWiki 문서 또는 마크다운 폴더를 [VitePress](https://vitepress.dev)
 GitHub Pages에 올리는 도구. 사이트 구조는 **서재 → 책 → 대분류 → 소주제 → 글** 4단계이고,
 책이 몇 권이든 자동으로 늘어난다.
 
+## 저장소 한눈에 보기
+
+이 도구와 관련된 GitHub 저장소는 두 개다. 이름이 비슷해서 헷갈리기 쉬우니 먼저 확인한다.
+
+| 저장소 | 용도 | 어디서 쓰나 |
+|---|---|---|
+| [`iamtalker/iamtalker.github.io`](https://github.com/iamtalker/iamtalker.github.io) | **내 사이트 저장소.** 책과 글, 사이트 코드가 들어 있다. 여기로 push하면 사이트가 갱신된다. | 이 폴더의 `origin`. [▶ 사이트에 올리기]가 여기로 보낸다. |
+| [`iamtalker/githubio_book`](https://github.com/iamtalker/githubio_book) | **도구 배포 저장소.** 책과 개인 설정을 뺀 도구 사본만 들어간다. 다른 사람에게 도구를 나눠 줄 때만 쓴다. | `py tools/make_release.py --push` 로 만든다. 사이트 갱신과는 관계없다. |
+
+- 글을 쓰거나 사이트를 고칠 때는 `iamtalker.github.io` 만 신경 쓰면 된다.
+- 도구를 다른 사람에게 줄 때만 `githubio_book` 에 올린다.
+
 ## 처음 쓰기
 
 **`update.bat`** 을 더블클릭하면 창이 하나 열린다. 처음에는 **설정 마법사**가 한 단계씩 안내한다.
